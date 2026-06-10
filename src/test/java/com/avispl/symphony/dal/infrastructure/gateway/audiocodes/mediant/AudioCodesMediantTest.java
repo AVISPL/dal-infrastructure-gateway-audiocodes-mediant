@@ -16,10 +16,11 @@ import org.junit.jupiter.api.Test;
  * @since 1.0.0
  */
 class AudioCodesMediantTest {
-	private final AudioCodesMediantCommunicator communicator = new AudioCodesMediantCommunicator();
+	private AudioCodesMediantCommunicator communicator;
 
 	@BeforeEach
 	void setUp() throws Exception {
+		communicator = new AudioCodesMediantCommunicator();
 		this.communicator.setHost("");
 		this.communicator.setPort(8083);
 		this.communicator.setLogin("");
