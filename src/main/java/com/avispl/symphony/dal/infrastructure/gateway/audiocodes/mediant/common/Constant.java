@@ -15,4 +15,13 @@ import lombok.experimental.UtilityClass;
 public class Constant {
 	//	Special characters
 	public static final String HASH = "#";
+	public static final String NONE_VALUE = "None";
+	public static final String NULL = "Null";
+	public static final String NOT_AVAILABLE = "N/A";
+
+	public static final String ADAPTER_METADATA = "AdapterMetadata";
+	public static final String ADAPTER_VERSION = "AdapterVersion";
+	public static final String ADAPTER_BUILD_DATE = "AdapterBuildDate";
+	public static final String ADAPTER_UPTIME_MIN = "AdapterUptime(min)";
+	public static final String ADAPTER_UPTIME = "AdapterUptime";
 }
