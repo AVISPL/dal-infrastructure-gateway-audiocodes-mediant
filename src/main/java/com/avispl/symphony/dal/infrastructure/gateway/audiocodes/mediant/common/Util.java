@@ -41,36 +41,26 @@ public class Util {
 	 * @param time the uptime string to format
 	 * @return formatted uptime string or "None" if input is invalid
 	 */
-	public static String formatUpTime(String time) {
-		int seconds = Integer.parseInt(time);
-		if (seconds < 0) {
-			return Constant.NONE_VALUE;
-		}
+	public static String formatUpTime(long time) {
+		StringBuilder normalizedUptime = new StringBuilder();
 
-		int days = seconds / (24 * 3600);
-		seconds %= 24 * 3600;
-		int hours = seconds / 3600;
-		seconds %= 3600;
-		int minutes = seconds / 60;
-		seconds %= 60;
+		long seconds = time % 60;
+		long minutes = time % 3600 / 60;
+		long hours = time % 86400 / 3600;
+		long days = time / 86400;
 
-		StringBuilder result = new StringBuilder();
 		if (days > 0) {
-			result.append(days).append(" day(s) ");
+			normalizedUptime.append(days).append(" d ");
 		}
 		if (hours > 0) {
-			result.append(hours).append(" hour(s) ");
+			normalizedUptime.append(hours).append(" hr ");
 		}
 		if (minutes > 0) {
-			result.append(minutes).append(" minute(s) ");
+			normalizedUptime.append(minutes).append(" min ");
 		}
-		if (seconds > 0) {
-			result.append(seconds).append(" second(s) ");
+		if (seconds > 0 || normalizedUptime.isEmpty()) {
+			normalizedUptime.append(seconds).append(" sec");
 		}
-
-		if (result.length() == 0) {
-			return "0 second(s)";
-		}
-		return result.toString().trim();
+		return normalizedUptime.toString().trim();
 	}
 }

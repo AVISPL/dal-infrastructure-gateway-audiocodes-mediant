@@ -94,7 +94,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 					Util.getDefaultValueForNullData(adapterProperties.getProperty("adapter.build.date")));
 
 			long adapterUptime = System.currentTimeMillis() - adapterInitializationTimestamp;
-			stats.put(Constant.ADAPTER_METADATA + Constant.HASH + Constant.ADAPTER_UPTIME, Util.formatUpTime(String.valueOf(adapterUptime / 1000)));
+			stats.put(Constant.ADAPTER_METADATA + Constant.HASH + Constant.ADAPTER_UPTIME, Util.formatUpTime(adapterUptime / 1000));
 			stats.put(Constant.ADAPTER_METADATA + Constant.HASH + Constant.ADAPTER_UPTIME_MIN, String.valueOf(adapterUptime / (1000 * 60)));
 		} catch (Exception e) {
 			logger.error("Failed to populate metadata information", e);
