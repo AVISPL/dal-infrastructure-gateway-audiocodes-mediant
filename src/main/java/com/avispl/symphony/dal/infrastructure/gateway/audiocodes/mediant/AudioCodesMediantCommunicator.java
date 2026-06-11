@@ -3,7 +3,9 @@
  */
 package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +21,9 @@ import com.avispl.symphony.api.dal.monitor.Monitorable;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.Communicator;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Constant;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Util;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.models.Status;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.types.GeneralProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.types.NetworkProperty;
 
 /**
  * AudioCodesMediantCommunicator class
@@ -27,21 +32,21 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.
  * @since 1.0.0
  */
 public class AudioCodesMediantCommunicator extends Communicator implements Monitorable, Controller {
-	private ExtendedStatistics localExtendedStatistics = new ExtendedStatistics();
+	private final ExtendedStatistics localExtendedStatistics = new ExtendedStatistics();
 	private final EndpointStatistics localEndpointStatistics = new EndpointStatistics();
 	private final ReentrantLock reentrantLock = new ReentrantLock();
+
 	/** Adapter metadata properties - adapter version and build date */
-	private Properties adapterProperties;
+	private final Properties adapterProperties = new Properties();
+	/** Cached device status; defaults to an empty {@link Status} to avoid {@code null} checks. */
+	private Status deviceStatus = new Status();
 
-	/**
-	 * Device adapter instantiation timestamp.
-	 */
-	private long adapterInitializationTimestamp;
+	/** Device adapter instantiation timestamp. */
+	private final long adapterInitializationTimestamp = System.currentTimeMillis();
 
-	public AudioCodesMediantCommunicator() throws Exception {
+	public AudioCodesMediantCommunicator() throws IOException {
 		this.localExtendedStatistics.setStatistics(new HashMap<>());
 		this.localExtendedStatistics.setControllableProperties(new ArrayList<>());
-		adapterProperties = new Properties();
 		adapterProperties.load(getClass().getResourceAsStream("/version.properties"));
 	}
 
@@ -50,10 +55,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 */
 	@Override
 	protected void internalInit() throws Exception {
-		if (logger.isDebugEnabled()) {
-			logger.debug("Internal init is called.");
-		}
-		adapterInitializationTimestamp = System.currentTimeMillis();
+		this.log.debug("Internal init is called.");
 		super.internalInit();
 	}
 
@@ -62,6 +64,9 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		//  Clear the extended properties
 		this.localExtendedStatistics.setStatistics(new HashMap<>());
 		this.localExtendedStatistics.setControllableProperties(new ArrayList<>());
+		//	Clear the populated data
+		this.adapterProperties.clear();
+		this.deviceStatus = new Status();
 		super.internalDestroy();
 	}
 
@@ -69,12 +74,11 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	public List<Statistics> getMultipleStatistics() throws Exception {
 		reentrantLock.lock();
 		try {
-			ExtendedStatistics extStats = new ExtendedStatistics();
-			Map<String, String> stats = new HashMap<>();
+			var stats = new HashMap<String, String>();
 			retrieveMetadata(stats);
+			retrieveDeviceStatus(stats);
 
-			extStats.setStatistics(stats);
-			localExtendedStatistics = extStats;
+			this.localExtendedStatistics.setStatistics(stats);
 		} finally {
 			reentrantLock.unlock();
 		}
@@ -88,7 +92,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 */
 	private void retrieveMetadata(Map<String, String> stats) {
 		try {
-			stats.put( Constant.ADAPTER_METADATA + Constant.HASH + Constant.ADAPTER_VERSION,
+			stats.put(Constant.ADAPTER_METADATA + Constant.HASH + Constant.ADAPTER_VERSION,
 					Util.getDefaultValueForNullData(adapterProperties.getProperty("adapter.version")));
 			stats.put(Constant.ADAPTER_METADATA + Constant.HASH + Constant.ADAPTER_BUILD_DATE,
 					Util.getDefaultValueForNullData(adapterProperties.getProperty("adapter.build.date")));
@@ -109,5 +113,34 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	@Override
 	public void controlProperties(List<ControllableProperty> controllableProperties) throws Exception {
 		throw new UnsupportedOperationException("Currently, the feature to control properties is not supported.");
+	}
+
+	/**
+	 * Retrieves the device status from the remote endpoint and populates {@code stats}
+	 * with properties from the {@code General} and {@code Network} groups.
+	 *
+	 * <p>If the status response is {@code null}, a warning is logged and both groups are skipped entirely.
+	 *
+	 * <p>{@link GeneralProperty} values are populated with a default fallback for {@code null} data;
+	 * {@link NetworkProperty} values use a stricter fallback (see {@link Util#getDefaultValueForNullData(String, boolean)}).
+	 *
+	 * @param stats the map to populate with property display names as keys
+	 * and their corresponding string values as values; must not be {@code null}
+	 * @throws Exception if the status request fails for any other reason
+	 */
+	private void retrieveDeviceStatus(Map<String, String> stats) throws Exception {
+		this.deviceStatus = this.fetchData(Status.class, Constant.STATUS_ENDPOINT);
+		if (deviceStatus == null) {
+			log.warn("The device status param is null; skip retrieving the General and Network group");
+			return;
+		}
+		Arrays.stream(GeneralProperty.values()).forEach(property -> {
+			var value = GeneralProperty.getPropertyValue(property, deviceStatus);
+			stats.put(property.getDisplayName(), Util.getDefaultValueForNullData(value));
+		});
+		Arrays.stream(NetworkProperty.values()).forEach(property -> {
+			var value = NetworkProperty.getPropertyValue(property, deviceStatus);
+			stats.put(property.getDisplayName(), Util.getDefaultValueForNullData(value, false));
+		});
 	}
 }
