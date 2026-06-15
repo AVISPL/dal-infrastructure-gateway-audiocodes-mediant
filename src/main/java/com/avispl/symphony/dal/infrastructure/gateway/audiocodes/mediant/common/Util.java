@@ -4,6 +4,9 @@
 
 package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
 import com.avispl.symphony.dal.util.StringUtils;
 
 /**
@@ -13,8 +16,10 @@ import com.avispl.symphony.dal.util.StringUtils;
  * @author Harry / Symphony Dev Team
  * @since 1.0.0
  */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+public final class Util {
+	private static final Logger LOG = Logger.ofClass(Util.class);
 
-public class Util {
 	/**
 	 * check value is null or empty
 	 *
@@ -22,7 +27,25 @@ public class Util {
 	 * @return value after checking
 	 */
 	public static String getDefaultValueForNullData(String value) {
-		return StringUtils.isNotNullOrEmpty(value) && !Constant.NULL.equalsIgnoreCase(value) ? uppercaseFirstCharacter(value) : Constant.NONE_VALUE;
+		return getDefaultValueForNullData(value, true);
+	}
+
+	public static String getDefaultValueForNullData(String value, boolean isTitleCase) {
+		if (value == null) {
+			LOG.warn("Skip value mapping: value is null");
+			return Constant.NOT_AVAILABLE;
+		}
+		if (StringUtils.isNullOrEmpty(value, true)) {
+			LOG.warn("Skip value mapping: string is null/empty");
+			return Constant.NOT_AVAILABLE;
+		}
+		if (isBoolean(value)) {
+			return value.toLowerCase();
+		}
+		if (isInt(value)) {
+			return String.valueOf(Integer.parseInt(value));
+		}
+		return isTitleCase ? uppercaseFirstCharacter(value) : value;
 	}
 
 	/**
@@ -62,5 +85,21 @@ public class Util {
 			normalizedUptime.append(seconds).append(" sec");
 		}
 		return normalizedUptime.toString().trim();
+	}
+
+	private static boolean isBoolean(String value) {
+		return value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false");
+	}
+
+	private static boolean isInt(String value) {
+		if (StringUtils.isNullOrEmpty(value, true)) {
+			return false;
+		}
+		try {
+			Integer.parseInt(value);
+			return true;
+		} catch (NumberFormatException e) {
+			return false;
+		}
 	}
 }
