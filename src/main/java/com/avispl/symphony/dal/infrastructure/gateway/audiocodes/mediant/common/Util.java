@@ -146,23 +146,52 @@ public final class Util {
 	/**
 	 * Generates a flat monitoring properties map from a list of active alarms.
 	 * <p>
-	 * Each alarm is represented as a group named {@code ActiveAlarm_<id>}, with entries for
-	 * each {@link AlarmProperty}. Keys follow the format {@code ActiveAlarm_<id>#<PropertyName>}.
-	 * Returns an empty map if the list is null or empty.
+	 * A summary group named {@code ActiveAlarms} is always emitted with the total alarm count
+	 * ({@code ActiveAlarms#Count}) and the distinct severity levels and sources currently present,
+	 * each rendered as a CSV string ({@code ActiveAlarms#Severity}, {@code ActiveAlarms#Sources}).
+	 * <p>
+	 * Each individual alarm is additionally represented as a group named {@code ActiveAlarms_<id>},
+	 * with entries for each {@link AlarmProperty}. Keys follow the format {@code ActiveAlarms_<id>#<PropertyName>}.
 	 *
 	 * @param alarmsList the list of active alarms to map
 	 * @return a map of monitoring properties keyed by alarm group and property name
 	 */
 	public static Map<String, String> generateActiveAlarmsProperties(List<Alarms> alarmsList) {
-		if (CollectionUtils.isEmpty(alarmsList)) {
-			return Collections.emptyMap();
-		}
 		Map<String, String> properties = new LinkedHashMap<>();
-		for (Alarms alarm : alarmsList) {
-			String groupName = Constant.ACTIVE_ALARM + Constant.UNDERSCORE + alarm.getId();
-			properties.putAll(generateProperties(AlarmProperty.values(), groupName, property -> mapToAlarm(alarm, property)));
+		int count = CollectionUtils.isEmpty(alarmsList) ? 0 : alarmsList.size();
+		properties.put(String.format(Constant.PROPERTY_FORMAT, Constant.ACTIVE_ALARM, Constant.COUNT), String.valueOf(count));
+		properties.put(String.format(Constant.PROPERTY_FORMAT, Constant.ACTIVE_ALARM, Constant.SEVERITY), joinDistinct(alarmsList, Alarms::getSeverity));
+		properties.put(String.format(Constant.PROPERTY_FORMAT, Constant.ACTIVE_ALARM, Constant.SOURCES), joinDistinct(alarmsList, Alarms::getSource));
+
+		if (!CollectionUtils.isEmpty(alarmsList)) {
+			for (Alarms alarm : alarmsList) {
+				String groupName = Constant.ACTIVE_ALARM + Constant.UNDERSCORE + alarm.getId();
+				properties.putAll(generateProperties(AlarmProperty.values(), groupName, property -> mapToAlarm(alarm, property)));
+			}
 		}
 		return properties;
+	}
+
+	/**
+	 * Collects the distinct, title-cased values produced by {@code extractor} across all alarms
+	 * and joins them into a CSV string (e.g. {@code "Medium, High"}).
+	 *
+	 * @param alarmsList the list of active alarms to scan
+	 * @param extractor  extracts the raw field (e.g. severity or source) from a single alarm
+	 * @return the CSV of distinct values, or {@code Constant.NOT_AVAILABLE} if none are present
+	 */
+	private static String joinDistinct(List<Alarms> alarmsList, Function<Alarms, String> extractor) {
+		if (CollectionUtils.isEmpty(alarmsList)) {
+			return Constant.NOT_AVAILABLE;
+		}
+		String csv = alarmsList.stream()
+				.map(extractor)
+				.filter(StringUtils::isNotNullOrEmpty)
+				.map(Util::toTitleCase)
+				.filter(Objects::nonNull)
+				.distinct()
+				.collect(Collectors.joining(Constant.COMMA));
+		return StringUtils.isNotNullOrEmpty(csv) ? csv : Constant.NOT_AVAILABLE;
 	}
 
 	/**
