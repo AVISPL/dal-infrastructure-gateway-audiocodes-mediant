@@ -18,6 +18,7 @@ public class Constant {
 	public static final String NOT_AVAILABLE = "N/A";
 	public static final String UNDERSCORE = "_";
 	public static final String SLASH = "/";
+	public static final String COMMA = ", ";
 
 	// Formats
 	public static final String PROPERTY_FORMAT = "%s#%s";
@@ -41,5 +42,10 @@ public class Constant {
 	public final String STATUS_ENDPOINT = "/status";
 	public static final String ACTIVE_ALARMS_API = "/alarms/active";
 	public static final String ACTIVE_ALARM = "ActiveAlarms";
+
+	//	ActiveAlarms summary group properties
+	public static final String COUNT = "Count";
+	public static final String SEVERITY = "Severity";
+	public static final String SOURCES = "Sources";
 
 }
