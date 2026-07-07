@@ -24,6 +24,7 @@ import com.avispl.symphony.api.dal.dto.monitor.Statistics;
 import com.avispl.symphony.api.dal.monitor.Monitorable;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.Communicator;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Constant;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.DataConversionException;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Util;
 
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.models.Status;
@@ -161,16 +162,24 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 
 	/**
 	 * Fetches JSON from {@code uri} and deserializes it into {@code targetClass}.
-	 * Returns {@code null} (with a warning log) if the response is missing or cannot be deserialized,
-	 * so the caller can safely retain the previously cached value.
+	 * <p>
+	 * Returns {@code null} (with a warning log) if the device response is empty/no-content. This is
+	 * treated as a confirmed, authoritative "no data" signal from the device rather than an error -
+	 * callers should generally act on it (e.g. clear cached state), not just ignore it.
+	 * <p>
+	 * Throws {@link DataConversionException} if a response body was received but could not be
+	 * deserialized into {@code targetClass} (malformed/unexpected payload) - this represents a
+	 * genuine error, and callers should generally retain their previously cached value instead of
+	 * overwriting it with incomplete data.
 	 *
 	 * @param <T>         the target type
 	 * @param uri         the API endpoint to call
 	 * @param targetClass the class to deserialize into
-	 * @return the deserialized object, or {@code null} if unavailable
-	 * @throws FailedLoginException if the HTTP request itself fails
+	 * @return the deserialized object, or {@code null} if the device returned no content
+	 * @throws FailedLoginException    if the HTTP request itself fails
+	 * @throws DataConversionException if the response body could not be deserialized
 	 */
-	private <T> T fetchAndConvert(String uri, Class<T> targetClass) throws FailedLoginException {
+	private <T> T fetchAndConvert(String uri, Class<T> targetClass) throws FailedLoginException, DataConversionException {
 		String responseClassName = targetClass.getName();
 		JsonNode node = fetchJsonNode(uri);
 		if (node == null) {
@@ -180,55 +189,53 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		try {
 			return this.objectMapper.convertValue(node, targetClass);
 		} catch (IllegalArgumentException e) {
-			this.logger.error(Constant.CONVERT_DATA_FAILED.formatted(responseClassName));
-			return null;
+			String message = Constant.CONVERT_DATA_FAILED.formatted(responseClassName);
+			this.logger.error(message);
+			throw new DataConversionException(message, e);
 		}
 	}
 
 	/**
 	 * Fetches and refreshes the cached active-alarms list from the device.
 	 * <p>
-	 * Unlike a generic fetch failure (network error, or a response that cannot be parsed at all —
-	 * in which case the previously cached {@link #alarmsList} is retained), a <b>no-content
-	 * response</b> or an <b>empty/absent {@code alarms} array</b> are both treated as an explicit,
-	 * authoritative signal from the device that there are currently zero active alarms, and
-	 * {@link #alarmsList} is reset to an empty list accordingly. This prevents Symphony from
-	 * continuing to display a stale alarm count/details after all alarms have been cleared on the
-	 * device.
+	 * A {@code null} response (no content) or an empty/absent {@code alarms} array are both
+	 * treated as an explicit, authoritative signal from the device that there are currently zero
+	 * active alarms, and {@link #alarmsList} is reset to an empty list accordingly. This prevents
+	 * Symphony from continuing to display a stale alarm count/details after all alarms have been
+	 * cleared on the device.
+	 * <p>
+	 * If the top-level response cannot be parsed at all ({@link DataConversionException}), the
+	 * previously cached {@link #alarmsList} is retained rather than risking data loss based on a
+	 * malformed payload. The same applies per-alarm: if a specific alarm's detail response cannot
+	 * be parsed, that alarm is skipped (logged) without discarding the rest of the refreshed list.
 	 *
 	 * @throws FailedLoginException if the HTTP request fails due to authentication or connectivity issues
 	 */
 	private void setupData() throws Exception {
-		JsonNode alarmsNode = fetchJsonNode(Constant.ACTIVE_ALARMS_API);
-		if (alarmsNode == null) {
-			//	No content returned - the device is reporting zero active alarms.
-			this.logger.debug("No content returned for %s; treating as zero active alarms.".formatted(Constant.ACTIVE_ALARMS_API));
-			this.alarmsList = new ArrayList<>();
-			return;
-		}
-
 		AlarmsResponse alarmsResponse;
 		try {
-			alarmsResponse = this.objectMapper.convertValue(alarmsNode, AlarmsResponse.class);
-		} catch (IllegalArgumentException e) {
-			//	Response could not be parsed at all - keep the previously cached alarms list rather
-			//	than risk wiping valid data based on an unexpected/malformed payload.
-			this.logger.error(Constant.CONVERT_DATA_FAILED.formatted(AlarmsResponse.class.getName()));
+			alarmsResponse = fetchAndConvert(Constant.ACTIVE_ALARMS_API, AlarmsResponse.class);
+		} catch (DataConversionException e) {
+			//	Malformed/unexpected payload - keep the previously cached alarms list.
 			return;
 		}
 
-		List<Alarms> alarmRefs = alarmsResponse.getAlarms();
+		List<Alarms> alarmRefs = alarmsResponse == null ? null : alarmsResponse.getAlarms();
 		if (alarmRefs == null || alarmRefs.isEmpty()) {
-			//	Empty (or absent) "alarms" array - the device is reporting zero active alarms.
+			//	No content, or an empty/absent "alarms" array - the device is reporting zero active alarms.
 			this.alarmsList = new ArrayList<>();
 			return;
 		}
 
 		List<Alarms> fullAlarmsList = new ArrayList<>();
 		for (Alarms alarm : alarmRefs) {
-			Alarms fullAlarm = fetchAndConvert(Constant.ACTIVE_ALARMS_API + Constant.SLASH + alarm.getId(), Alarms.class);
-			if (fullAlarm != null) {
-				fullAlarmsList.add(fullAlarm);
+			try {
+				Alarms fullAlarm = fetchAndConvert(Constant.ACTIVE_ALARMS_API + Constant.SLASH + alarm.getId(), Alarms.class);
+				if (fullAlarm != null) {
+					fullAlarmsList.add(fullAlarm);
+				}
+			} catch (DataConversionException e) {
+				this.logger.error("Skipping alarm '%s' due to a malformed detail response.".formatted(alarm.getId()));
 			}
 		}
 		this.alarmsList = fullAlarmsList;
