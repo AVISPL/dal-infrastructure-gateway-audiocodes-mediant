@@ -143,6 +143,23 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	}
 
 	/**
+	 * Sends a GET request to {@code uri} and returns the raw {@link JsonNode}, or {@code null}
+	 * if the device responded with no content (e.g. an empty body).
+	 *
+	 * @param uri the API endpoint to call
+	 * @return the raw response node, or {@code null} if the response body was empty
+	 * @throws FailedLoginException if the HTTP request itself fails
+	 */
+	private JsonNode fetchJsonNode(String uri) throws FailedLoginException {
+		try {
+			return super.doGet(uri, JsonNode.class);
+		} catch (Exception e) {
+			this.logger.error(Constant.FETCH_DATA_FAILED.formatted(uri, JsonNode.class.getName()));
+			throw new FailedLoginException(Constant.LOGIN_FAILED + ": " + e.getMessage());
+		}
+	}
+
+	/**
 	 * Fetches JSON from {@code uri} and deserializes it into {@code targetClass}.
 	 * Returns {@code null} (with a warning log) if the response is missing or cannot be deserialized,
 	 * so the caller can safely retain the previously cached value.
@@ -155,13 +172,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 */
 	private <T> T fetchAndConvert(String uri, Class<T> targetClass) throws FailedLoginException {
 		String responseClassName = targetClass.getName();
-		JsonNode node;
-		try {
-			node = super.doGet(uri, JsonNode.class);
-		} catch (Exception e) {
-			this.logger.error(Constant.FETCH_DATA_FAILED.formatted(uri, responseClassName));
-			throw new FailedLoginException(Constant.LOGIN_FAILED + ": " + e.getMessage());
-		}
+		JsonNode node = fetchJsonNode(uri);
 		if (node == null) {
 			this.logger.warn(Constant.FETCHED_DATA_NULL_WARNING.formatted(uri, responseClassName));
 			return null;
@@ -175,25 +186,52 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	}
 
 	/**
-	 * Fetches and refreshes the cached device data from the device APIs.
+	 * Fetches and refreshes the cached active-alarms list from the device.
 	 * <p>
-	 * If a fetch or deserialization failure occurs, the previously cached value is retained
-	 * to avoid exposing incomplete or missing data downstream.
+	 * Unlike a generic fetch failure (network error, or a response that cannot be parsed at all —
+	 * in which case the previously cached {@link #alarmsList} is retained), a <b>no-content
+	 * response</b> or an <b>empty/absent {@code alarms} array</b> are both treated as an explicit,
+	 * authoritative signal from the device that there are currently zero active alarms, and
+	 * {@link #alarmsList} is reset to an empty list accordingly. This prevents Symphony from
+	 * continuing to display a stale alarm count/details after all alarms have been cleared on the
+	 * device.
 	 *
 	 * @throws FailedLoginException if the HTTP request fails due to authentication or connectivity issues
 	 */
 	private void setupData() throws Exception {
-		AlarmsResponse alarmsResponse = fetchAndConvert(Constant.ACTIVE_ALARMS_API, AlarmsResponse.class);
-		if (alarmsResponse != null) {
-			List<Alarms> fullAlarmsList = new ArrayList<>();
-			for (Alarms alarm : alarmsResponse.getAlarms()) {
-				Alarms fullAlarm = fetchAndConvert(Constant.ACTIVE_ALARMS_API + Constant.SLASH + alarm.getId(), Alarms.class);
-				if (fullAlarm != null) {
-					fullAlarmsList.add(fullAlarm);
-				}
-			}
-			this.alarmsList = fullAlarmsList;
+		JsonNode alarmsNode = fetchJsonNode(Constant.ACTIVE_ALARMS_API);
+		if (alarmsNode == null) {
+			//	No content returned - the device is reporting zero active alarms.
+			this.logger.debug("No content returned for %s; treating as zero active alarms.".formatted(Constant.ACTIVE_ALARMS_API));
+			this.alarmsList = new ArrayList<>();
+			return;
 		}
+
+		AlarmsResponse alarmsResponse;
+		try {
+			alarmsResponse = this.objectMapper.convertValue(alarmsNode, AlarmsResponse.class);
+		} catch (IllegalArgumentException e) {
+			//	Response could not be parsed at all - keep the previously cached alarms list rather
+			//	than risk wiping valid data based on an unexpected/malformed payload.
+			this.logger.error(Constant.CONVERT_DATA_FAILED.formatted(AlarmsResponse.class.getName()));
+			return;
+		}
+
+		List<Alarms> alarmRefs = alarmsResponse.getAlarms();
+		if (alarmRefs == null || alarmRefs.isEmpty()) {
+			//	Empty (or absent) "alarms" array - the device is reporting zero active alarms.
+			this.alarmsList = new ArrayList<>();
+			return;
+		}
+
+		List<Alarms> fullAlarmsList = new ArrayList<>();
+		for (Alarms alarm : alarmRefs) {
+			Alarms fullAlarm = fetchAndConvert(Constant.ACTIVE_ALARMS_API + Constant.SLASH + alarm.getId(), Alarms.class);
+			if (fullAlarm != null) {
+				fullAlarmsList.add(fullAlarm);
+			}
+		}
+		this.alarmsList = fullAlarmsList;
 	}
 
 	/**
