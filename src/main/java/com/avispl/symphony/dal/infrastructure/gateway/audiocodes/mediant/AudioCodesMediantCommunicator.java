@@ -21,6 +21,7 @@ import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.EndpointStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.Statistics;
+import com.avispl.symphony.api.dal.error.ResourceNotReachableException;
 import com.avispl.symphony.api.dal.monitor.Monitorable;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.Communicator;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Constant;
@@ -146,17 +147,24 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	/**
 	 * Sends a GET request to {@code uri} and returns the raw {@link JsonNode}, or {@code null}
 	 * if the device responded with no content (e.g. an empty body).
+	 * <p>
+	 * {@link FailedLoginException} and {@link ResourceNotReachableException} - the SDK's own typed
+	 * signals for "bad credentials" and "device unreachable" respectively - are propagated as-is so
+	 * Symphony's UI surfaces the accurate error.
 	 *
 	 * @param uri the API endpoint to call
 	 * @return the raw response node, or {@code null} if the response body was empty
-	 * @throws FailedLoginException if the HTTP request itself fails
+	 * @throws FailedLoginException          if authentication fails
+	 * @throws ResourceNotReachableException if the device cannot be reached
 	 */
 	private JsonNode fetchJsonNode(String uri) throws FailedLoginException {
 		try {
 			return super.doGet(uri, JsonNode.class);
+		} catch (FailedLoginException | ResourceNotReachableException e) {
+			throw e;
 		} catch (Exception e) {
-			this.logger.error(Constant.FETCH_DATA_FAILED.formatted(uri, JsonNode.class.getName()));
-			throw new FailedLoginException(Constant.LOGIN_FAILED + ": " + e.getMessage());
+			this.logger.error(Constant.FETCH_DATA_FAILED.formatted(uri, JsonNode.class.getName()), e);
+			throw new IllegalStateException("Failed to send a request 'GET %s'".formatted(uri), e);
 		}
 	}
 
@@ -190,7 +198,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			return this.objectMapper.convertValue(node, targetClass);
 		} catch (IllegalArgumentException e) {
 			String message = Constant.CONVERT_DATA_FAILED.formatted(responseClassName);
-			this.logger.error(message);
+			this.logger.error(message, e);
 			throw new DataConversionException(message, e);
 		}
 	}
@@ -217,6 +225,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			alarmsResponse = fetchAndConvert(Constant.ACTIVE_ALARMS_API, AlarmsResponse.class);
 		} catch (DataConversionException e) {
 			//	Malformed/unexpected payload - keep the previously cached alarms list.
+			this.logger.warn("Retaining previously cached alarms list due to a malformed response from %s".formatted(Constant.ACTIVE_ALARMS_API), e);
 			return;
 		}
 
@@ -235,7 +244,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 					fullAlarmsList.add(fullAlarm);
 				}
 			} catch (DataConversionException e) {
-				this.logger.error("Skipping alarm '%s' due to a malformed detail response.".formatted(alarm.getId()));
+				this.logger.error("Skipping alarm '%s' due to a malformed detail response.".formatted(alarm.getId()), e);
 			}
 		}
 		this.alarmsList = fullAlarmsList;
