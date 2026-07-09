@@ -25,7 +25,6 @@ public class Constant {
 
 
 	//	Fail messages
-	public static final String LOGIN_FAILED = "Failed to login, please check the credentials";
 	public static final String FETCHED_DATA_NULL_WARNING = "Fetched data is null. Endpoint: %s, ResponseClass: %s";
 	public static final String FETCH_DATA_FAILED = "Exception while fetching data. Endpoint: %s, ResponseClass: %s";
 	public static final String CONVERT_DATA_FAILED = "Failed to convert response data to %s";
