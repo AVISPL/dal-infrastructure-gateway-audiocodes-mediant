@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Constant;
 
@@ -28,10 +29,10 @@ class AudioCodesMediantTest {
 	@BeforeEach
 	void setUp() throws Exception {
 		communicator = new AudioCodesMediantCommunicator();
-		this.communicator.setHost("");
+		this.communicator.setHost("localhost");
 		this.communicator.setPort(8083);
-		this.communicator.setLogin("");
-		this.communicator.setPassword("");
+		this.communicator.setLogin("admin");
+		this.communicator.setPassword("admin");
 		this.communicator.init();
 	}
 
@@ -42,8 +43,19 @@ class AudioCodesMediantTest {
 	}
 
 	@Test
-	void testLogin_withInvalidCredential() {
-		Assertions.assertThrows(FailedLoginException.class, this.communicator::getMultipleStatistics);
+	void testLogin_withInvalidCredential() throws Exception {
+		var invalidCredsCommunicator = new AudioCodesMediantCommunicator();
+		invalidCredsCommunicator.setHost("localhost");
+		invalidCredsCommunicator.setPort(8083);
+		invalidCredsCommunicator.setLogin("admin");
+		invalidCredsCommunicator.setPassword("wrong-password");
+		invalidCredsCommunicator.init();
+		try {
+			Assertions.assertThrows(FailedLoginException.class, invalidCredsCommunicator::getMultipleStatistics);
+		} finally {
+			invalidCredsCommunicator.disconnect();
+			invalidCredsCommunicator.destroy();
+		}
 	}
 
 	@Test
@@ -62,6 +74,42 @@ class AudioCodesMediantTest {
 
 		Assertions.assertTrue(MapUtils.isNotEmpty(networkGroup));
 		networkGroup.forEach((pName, pValue) -> Assertions.assertTrue(this.isValidValue(pValue)));
+	}
+
+	@Test
+	void testGetMultipleStatistics_withCallStatsGroup() throws Exception {
+		var statistics = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
+		var callStatsGroup = this.filterGroupStatistics(statistics.getStatistics(), Constant.CALL_STATS_GROUP);
+
+		Assertions.assertTrue(MapUtils.isNotEmpty(callStatsGroup));
+		callStatsGroup.forEach((pName, pValue) -> Assertions.assertTrue(this.isValidValue(pValue)));
+	}
+
+	@Test
+	void testControlProperty_startAndStopCallDiagnostic() throws Exception {
+		String calledNumberKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_CALLED_NUMBER;
+		String callingNumberKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_CALLING_NUMBER;
+		String destinationKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_DESTINATION;
+		String statusKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_STATUS;
+		String startKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_START;
+		String stopKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_STOP;
+
+		this.communicator.getMultipleStatistics();
+
+		this.communicator.controlProperty(new ControllableProperty(calledNumberKey, "200", null));
+		this.communicator.controlProperty(new ControllableProperty(callingNumberKey, "100", null));
+		this.communicator.controlProperty(new ControllableProperty(destinationKey, "10.4.219.229", null));
+		this.communicator.controlProperty(new ControllableProperty(startKey, "1", null));
+
+		var afterStart = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
+		String statusAfterStart = afterStart.getStatistics().get(statusKey);
+		Assertions.assertTrue(this.isValidValue(statusAfterStart));
+		Assertions.assertNotEquals(Constant.CALL_DIAGNOSTICS_NOT_DIALED, statusAfterStart);
+
+		this.communicator.controlProperty(new ControllableProperty(stopKey, "1", null));
+
+		var afterStop = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
+		Assertions.assertEquals(Constant.CALL_DIAGNOSTICS_DISCONNECTED, afterStop.getStatistics().get(statusKey));
 	}
 
 	private Map<String, String> filterGroupStatistics(Map<String, String> statistics, String groupName) {

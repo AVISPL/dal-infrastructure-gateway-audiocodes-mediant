@@ -49,9 +49,6 @@
             <version>1.0.1</version>
           </dependency>
         </dependencies>
-        <configuration>
-          <groups>Mock</groups>
-        </configuration>
       </plugin>
       <plugin>
         <groupId>pl.project13.maven</groupId>
