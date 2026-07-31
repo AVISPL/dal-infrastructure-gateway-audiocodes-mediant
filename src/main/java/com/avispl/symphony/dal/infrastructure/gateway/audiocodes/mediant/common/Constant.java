@@ -41,10 +41,31 @@ public class Constant {
 	public final String STATUS_ENDPOINT = "/status";
 	public static final String ACTIVE_ALARMS_API = "/alarms/active";
 	public static final String ACTIVE_ALARM = "ActiveAlarms";
+	//	Base path for singular-entity SBC call-statistics KPIs; a specific KPI id is appended
+	//	(e.g. ".../busyCallsInTotal") per CallStatsProperty.
+	public static final String CALL_STATS_KPI_API = "/kpi/current/sbc/callStats/global";
+	public static final String TEST_CALL_DIAL_API = "/sipTestCall/dial";
+	public static final String TEST_CALL_STATUS_API = "/sipTestCall/getStatus";
+	public static final String TEST_CALL_DROP_API = "/sipTestCall/drop";
+	public static final String SESSION_ID_PARAM = "sessionId";
 
 	//	ActiveAlarms summary group properties
 	public static final String COUNT = "Count";
 	public static final String SEVERITY = "Severity";
 	public static final String SOURCES = "Sources";
+
+	//	Groups
+	public static final String CALL_STATS_GROUP = "CallStatistics";
+	public static final String CALL_DIAGNOSTICS_GROUP = "CallDiagnostics";
+
+	//	CallDiagnostics group properties
+	public static final String CALL_DIAGNOSTICS_CALLED_NUMBER = "CalledNumber";
+	public static final String CALL_DIAGNOSTICS_CALLING_NUMBER = "CallingNumber";
+	public static final String CALL_DIAGNOSTICS_DESTINATION = "Destination";
+	public static final String CALL_DIAGNOSTICS_STATUS = "Status";
+	public static final String CALL_DIAGNOSTICS_START = "Start";
+	public static final String CALL_DIAGNOSTICS_STOP = "Stop";
+	public static final String CALL_DIAGNOSTICS_NOT_DIALED = "Not Dialed";
+	public static final String CALL_DIAGNOSTICS_DISCONNECTED = "Disconnected";
 
 }
