@@ -93,11 +93,13 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	private String callDiagnosticReleaseCause = Constant.NOT_AVAILABLE;
 
 	/**
-	 * Names of the optional, KPI-heavy call-statistics groups (e.g. {@code CallLoadStatistics},
-	 * {@code CallRoutingStatistics}) to pull from the device and display. Empty by default, meaning
-	 * none of them are fetched - each one is a per-KPI request against the device, so groups the
-	 * caller doesn't ask for are skipped entirely rather than fetched and hidden. Including
-	 * {@link Constant#CALL_STATS_ALL_GROUPS} enables every group regardless of what else is listed.
+	 * Names of the optional statistics groups to pull from the device and display: the KPI-heavy
+	 * call-statistics groups (e.g. {@code CallLoadStatistics}, {@code CallRoutingStatistics}) and
+	 * {@link Constant#CALL_DIAGNOSTICS_GROUP}. Empty by default, meaning none of them are fetched -
+	 * each KPI group is a per-KPI request against the device, and {@code CallDiagnostics} involves its
+	 * own test-call session tracking, so groups the caller doesn't ask for are skipped entirely rather
+	 * than fetched and hidden. Including {@link Constant#CALL_STATS_ALL_GROUPS} enables every group
+	 * regardless of what else is listed.
 	 */
 	private List<String> displayPropertyGroups = new ArrayList<>();
 
@@ -119,10 +121,11 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	}
 
 	/**
-	 * Sets which optional call-statistics groups (e.g. {@code CallLoadStatistics}, {@code CallRoutingStatistics})
-	 * to pull from the device and display, from a comma-separated string. Groups not listed here are skipped
-	 * entirely on every poll cycle - no request is made and no stats are emitted for them. Passing
-	 * {@link Constant#CALL_STATS_ALL_GROUPS} (alone or alongside other names) enables every group.
+	 * Sets which optional statistics groups (e.g. {@code CallLoadStatistics}, {@code CallRoutingStatistics},
+	 * {@link Constant#CALL_DIAGNOSTICS_GROUP}) to pull from the device and display, from a comma-separated
+	 * string. Groups not listed here are skipped entirely on every poll cycle - no request is made and no
+	 * stats are emitted for them. Passing {@link Constant#CALL_STATS_ALL_GROUPS} (alone or alongside other
+	 * names) enables every group.
 	 *
 	 * @param displayPropertyGroups comma-separated group names; blank/empty clears the list (nothing displayed)
 	 */
@@ -492,7 +495,10 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	/**
 	 * Populates {@code stats} with the current {@code CallDiagnostics} group values and appends the
 	 * corresponding controls ({@code CalledNumber}/{@code CallingNumber}/{@code Destination} text
-	 * fields and {@code Start}/{@code Stop} buttons) to {@code controls}.
+	 * fields and {@code Start}/{@code Stop} buttons) to {@code controls}. Like the KPI-heavy statistics
+	 * groups, the whole {@code CallDiagnostics} group is gated behind {@link #displayPropertyGroups}
+	 * (or {@link Constant#CALL_STATS_ALL_GROUPS}); if it isn't listed, this is a no-op and no request
+	 * is made, even for a session already in progress.
 	 * <p>
 	 * If a test call session is currently tracked, its status is re-fetched from the device first
 	 * (see {@link #refreshCallDiagnosticStatus()}) so that a call which disconnected on its own
@@ -506,6 +512,9 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * @throws FailedLoginException if refreshing the test call status fails due to authentication issues
 	 */
 	private void retrieveCallDiagnostics(Map<String, String> stats, List<AdvancedControllableProperty> controls) throws FailedLoginException {
+		if (!this.displayPropertyGroups.contains(Constant.CALL_STATS_ALL_GROUPS) && !this.displayPropertyGroups.contains(Constant.CALL_DIAGNOSTICS_GROUP)) {
+			return;
+		}
 		if (this.callDiagnosticSessionId != null) {
 			refreshCallDiagnosticStatus();
 		}

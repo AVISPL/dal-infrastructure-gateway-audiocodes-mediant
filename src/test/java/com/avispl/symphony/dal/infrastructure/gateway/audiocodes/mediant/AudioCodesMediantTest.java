@@ -132,6 +132,25 @@ class AudioCodesMediantTest {
 		Assertions.assertFalse(afterStop.getStatistics().containsKey(stopKey), "Stop should be removed once the call is disconnected");
 	}
 
+	@Test
+	void testGetMultipleStatistics_withCallDiagnosticsGroupDisabled() throws Exception {
+		var noDiagnosticsCommunicator = new AudioCodesMediantCommunicator();
+		noDiagnosticsCommunicator.setHost("localhost");
+		noDiagnosticsCommunicator.setPort(8083);
+		noDiagnosticsCommunicator.setLogin("admin");
+		noDiagnosticsCommunicator.setPassword("admin");
+		noDiagnosticsCommunicator.setDisplayPropertyGroups(Constant.CALL_LOAD_STATISTICS_GROUP);
+		noDiagnosticsCommunicator.init();
+		try {
+			var statistics = (ExtendedStatistics) noDiagnosticsCommunicator.getMultipleStatistics().get(0);
+			var diagnosticsGroup = this.filterGroupStatistics(statistics.getStatistics(), Constant.CALL_DIAGNOSTICS_GROUP);
+			Assertions.assertTrue(MapUtils.isEmpty(diagnosticsGroup), "CallDiagnostics should be absent when not listed in displayPropertyGroups");
+		} finally {
+			noDiagnosticsCommunicator.disconnect();
+			noDiagnosticsCommunicator.destroy();
+		}
+	}
+
 	private Map<String, String> filterGroupStatistics(Map<String, String> statistics, String groupName) {
 		return statistics.entrySet().stream()
 				.filter(e -> groupName == null ? !e.getKey().contains(Constant.HASH) : e.getKey().startsWith(groupName))
