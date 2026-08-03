@@ -3,6 +3,7 @@
  */
 package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant;
 
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -33,6 +34,7 @@ class AudioCodesMediantTest {
 		this.communicator.setPort(8083);
 		this.communicator.setLogin("admin");
 		this.communicator.setPassword("admin");
+		this.communicator.setDisplayPropertyGroups(Constant.CALL_STATS_ALL_GROUPS);
 		this.communicator.init();
 	}
 
@@ -77,12 +79,22 @@ class AudioCodesMediantTest {
 	}
 
 	@Test
-	void testGetMultipleStatistics_withCallStatsGroup() throws Exception {
+	void testGetMultipleStatistics_withCallStatsGroups() throws Exception {
 		var statistics = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
-		var callStatsGroup = this.filterGroupStatistics(statistics.getStatistics(), Constant.CALL_STATS_GROUP);
+		List<String> callStatsGroups = List.of(
+				Constant.CALL_LOAD_STATISTICS_GROUP,
+				Constant.CALL_QUALITY_STATISTICS_GROUP,
+				Constant.CALL_TERMINATION_STATISTICS_GROUP,
+				Constant.CALL_MEDIA_ISSUES_STATISTICS_GROUP,
+				Constant.CALL_CAPACITY_STATISTICS_GROUP,
+				Constant.CALL_ROUTING_STATISTICS_GROUP,
+				Constant.CALL_TRAFFIC_STATISTICS_GROUP);
 
-		Assertions.assertTrue(MapUtils.isNotEmpty(callStatsGroup));
-		callStatsGroup.forEach((pName, pValue) -> Assertions.assertTrue(this.isValidValue(pValue)));
+		for (String group : callStatsGroups) {
+			var groupStats = this.filterGroupStatistics(statistics.getStatistics(), group);
+			Assertions.assertTrue(MapUtils.isNotEmpty(groupStats), "Expected non-empty stats for group " + group);
+			groupStats.forEach((pName, pValue) -> Assertions.assertTrue(this.isValidValue(pValue)));
+		}
 	}
 
 	@Test
@@ -94,7 +106,9 @@ class AudioCodesMediantTest {
 		String startKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_START;
 		String stopKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_STOP;
 
-		this.communicator.getMultipleStatistics();
+		var beforeDial = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
+		Assertions.assertEquals(Constant.CALL_DIAGNOSTICS_NOT_DIALED, beforeDial.getStatistics().get(statusKey));
+		Assertions.assertFalse(beforeDial.getStatistics().containsKey(stopKey), "Stop should not be present before the first dial");
 
 		this.communicator.controlProperty(new ControllableProperty(calledNumberKey, "200", null));
 		this.communicator.controlProperty(new ControllableProperty(callingNumberKey, "100", null));
@@ -105,11 +119,17 @@ class AudioCodesMediantTest {
 		String statusAfterStart = afterStart.getStatistics().get(statusKey);
 		Assertions.assertTrue(this.isValidValue(statusAfterStart));
 		Assertions.assertNotEquals(Constant.CALL_DIAGNOSTICS_NOT_DIALED, statusAfterStart);
+		//	The test call may already have disconnected by this second poll (it's short-lived on this device/simulator),
+		//	so assert Stop's presence tracks the actual status rather than assuming it's still non-disconnected.
+		boolean expectStopPresent = !Constant.CALL_DIAGNOSTICS_DISCONNECTED.equals(statusAfterStart);
+		Assertions.assertEquals(expectStopPresent, afterStart.getStatistics().containsKey(stopKey),
+				"Stop presence should match whether the call is disconnected (status: %s)".formatted(statusAfterStart));
 
 		this.communicator.controlProperty(new ControllableProperty(stopKey, "1", null));
 
 		var afterStop = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
 		Assertions.assertEquals(Constant.CALL_DIAGNOSTICS_DISCONNECTED, afterStop.getStatistics().get(statusKey));
+		Assertions.assertFalse(afterStop.getStatistics().containsKey(stopKey), "Stop should be removed once the call is disconnected");
 	}
 
 	private Map<String, String> filterGroupStatistics(Map<String, String> statistics, String groupName) {

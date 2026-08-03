@@ -42,7 +42,7 @@ public class Constant {
 	public static final String ACTIVE_ALARMS_API = "/alarms/active";
 	public static final String ACTIVE_ALARM = "ActiveAlarms";
 	//	Base path for singular-entity SBC call-statistics KPIs; a specific KPI id is appended
-	//	(e.g. ".../busyCallsInTotal") per CallStatsProperty.
+	//	(e.g. ".../busyCallsInTotal") per each Call*StatsProperty enum.
 	public static final String CALL_STATS_KPI_API = "/kpi/current/sbc/callStats/global";
 	public static final String TEST_CALL_DIAL_API = "/sipTestCall/dial";
 	public static final String TEST_CALL_STATUS_API = "/sipTestCall/getStatus";
@@ -55,8 +55,17 @@ public class Constant {
 	public static final String SOURCES = "Sources";
 
 	//	Groups
-	public static final String CALL_STATS_GROUP = "CallStatistics";
 	public static final String CALL_DIAGNOSTICS_GROUP = "CallDiagnostics";
+	//	Optional KPI-heavy call-statistics groups, gated behind displayPropertyGroups (see AudioCodesMediantCommunicator).
+	//	If displayPropertyGroups contains this value, every group below is treated as enabled.
+	public static final String CALL_STATS_ALL_GROUPS = "All";
+	public static final String CALL_LOAD_STATISTICS_GROUP = "CallLoadStatistics";
+	public static final String CALL_QUALITY_STATISTICS_GROUP = "CallQualityStatistics";
+	public static final String CALL_TERMINATION_STATISTICS_GROUP = "CallTerminationStatistics";
+	public static final String CALL_MEDIA_ISSUES_STATISTICS_GROUP = "CallMediaIssuesStatistics";
+	public static final String CALL_CAPACITY_STATISTICS_GROUP = "CallCapacityStatistics";
+	public static final String CALL_ROUTING_STATISTICS_GROUP = "CallRoutingStatistics";
+	public static final String CALL_TRAFFIC_STATISTICS_GROUP = "CallTrafficStatistics";
 
 	//	CallDiagnostics group properties
 	public static final String CALL_DIAGNOSTICS_CALLED_NUMBER = "CalledNumber";
@@ -67,5 +76,7 @@ public class Constant {
 	public static final String CALL_DIAGNOSTICS_STOP = "Stop";
 	public static final String CALL_DIAGNOSTICS_NOT_DIALED = "Not Dialed";
 	public static final String CALL_DIAGNOSTICS_DISCONNECTED = "Disconnected";
+	public static final String CALL_DIAGNOSTICS_CALL_ID = "CallId";
+	public static final String CALL_DIAGNOSTICS_RELEASE_CAUSE = "ReleaseCause";
 
 }
