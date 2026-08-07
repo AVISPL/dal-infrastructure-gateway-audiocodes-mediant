@@ -586,8 +586,12 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			}
 			this.callDiagnosticStatus = status.getCallStatus();
 			if (Constant.CALL_DIAGNOSTICS_DISCONNECTED.equals(this.callDiagnosticStatus)) {
+				//	Deliberately not clearing calledNumber/callingNumber/destination here: the device keeps
+				//	this session (and thus keeps returning this same Disconnected status) around for its
+				//	keepResultTimeout, so this branch would otherwise re-fire and clobber values the caller
+				//	is already staging for the next call on every single poll during that window. They're
+				//	only cleared once the session is fully torn down (sessionId nulled below/elsewhere).
 				this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
-				clearCallDiagnosticConfig();
 			} else {
 				this.callDiagnosticCallId = Util.getDefaultValueForNullData(status.getCallId(), false);
 				refreshCallDiagnosticConfig();
