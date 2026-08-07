@@ -76,10 +76,11 @@ public final class Util {
 	}
 
 	/**
-	 * Formats uptime from a string representation "hh:mm:ss" into "X hour(s) Y minute(s)" format.
+	 * Formats a duration in seconds into a "{@code <d> d <h> hr <m> min <s> sec}" string, omitting
+	 * any leading zero-valued units (e.g. {@code 90} seconds becomes {@code "1 min 30 sec"}).
 	 *
-	 * @param time the uptime string to format
-	 * @return formatted uptime string or "None" if input is invalid
+	 * @param time the duration, in seconds
+	 * @return the formatted uptime string
 	 */
 	public static String formatUpTime(long time) {
 		StringBuilder normalizedUptime = new StringBuilder();

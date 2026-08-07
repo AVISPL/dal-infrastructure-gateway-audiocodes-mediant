@@ -34,6 +34,7 @@ public class Constant {
 	public static final String ADAPTER_BUILD_DATE = "AdapterBuildDate";
 	public static final String ADAPTER_UPTIME_MIN = "AdapterUptime(min)";
 	public static final String ADAPTER_UPTIME = "AdapterUptime";
+	public static final String ADAPTER_ACTIVE_PROPERTY_GROUPS = "ActivePropertyGroups";
 	//	Groups
 	public static final String NETWORK_GROUP = "Network";
 
@@ -46,6 +47,7 @@ public class Constant {
 	public static final String CALL_STATS_KPI_API = "/kpi/current/sbc/callStats/global";
 	public static final String TEST_CALL_DIAL_API = "/sipTestCall/dial";
 	public static final String TEST_CALL_STATUS_API = "/sipTestCall/getStatus";
+	public static final String TEST_CALL_SHOW_API = "/sipTestCall/show";
 	public static final String TEST_CALL_DROP_API = "/sipTestCall/drop";
 	public static final String SESSION_ID_PARAM = "sessionId";
 
@@ -76,7 +78,7 @@ public class Constant {
 	public static final String CALL_DIAGNOSTICS_STOP = "Stop";
 	public static final String CALL_DIAGNOSTICS_NOT_DIALED = "Not Dialed";
 	public static final String CALL_DIAGNOSTICS_DISCONNECTED = "Disconnected";
-	public static final String CALL_DIAGNOSTICS_CALL_ID = "CallId";
+	public static final String CALL_DIAGNOSTICS_CALL_ID = "CallID";
 	public static final String CALL_DIAGNOSTICS_RELEASE_CAUSE = "ReleaseCause";
 
 }
