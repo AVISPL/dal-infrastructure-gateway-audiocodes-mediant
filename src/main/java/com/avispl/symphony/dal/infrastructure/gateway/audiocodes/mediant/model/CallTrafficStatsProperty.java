@@ -18,7 +18,7 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum CallTrafficStatsProperty implements KpiProperty {
-	ATTEMPTED_CALLS_RATE_OUT("AttemptedCallsRateOut", "attemptedCallsRateOut"),
+	ATTEMPTED_CALLS_RATE_OUT("AttemptedCallsRateOut(cps)", "attemptedCallsRateOut"),
 	NO_ANSWER_CALLS_IN_TOTAL("NoAnswerCallsInTotal", "noAnswerCallsInTotal");
 
 	private final String name;

@@ -34,6 +34,7 @@ public class Constant {
 	public static final String ADAPTER_BUILD_DATE = "AdapterBuildDate";
 	public static final String ADAPTER_UPTIME_MIN = "AdapterUptime(min)";
 	public static final String ADAPTER_UPTIME = "AdapterUptime";
+	public static final String ADAPTER_ACTIVE_PROPERTY_GROUPS = "ActivePropertyGroups";
 	//	Groups
 	public static final String NETWORK_GROUP = "Network";
 
@@ -76,7 +77,7 @@ public class Constant {
 	public static final String CALL_DIAGNOSTICS_STOP = "Stop";
 	public static final String CALL_DIAGNOSTICS_NOT_DIALED = "Not Dialed";
 	public static final String CALL_DIAGNOSTICS_DISCONNECTED = "Disconnected";
-	public static final String CALL_DIAGNOSTICS_CALL_ID = "CallId";
+	public static final String CALL_DIAGNOSTICS_CALL_ID = "CallID";
 	public static final String CALL_DIAGNOSTICS_RELEASE_CAUSE = "ReleaseCause";
 
 }
