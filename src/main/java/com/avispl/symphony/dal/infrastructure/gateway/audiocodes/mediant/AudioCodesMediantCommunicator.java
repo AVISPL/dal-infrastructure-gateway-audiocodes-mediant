@@ -49,6 +49,7 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.C
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.Alarms;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.AlarmsResponse;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.KpiValue;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.TestCallConfig;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.TestCallDialResponse;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.TestCallStatus;
 
@@ -163,9 +164,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		this.adapterProperties.clear();
 		this.deviceStatus = new Status();
 		this.callDiagnosticSessionId = null;
-		this.callDiagnosticCalledNumber = "";
-		this.callDiagnosticCallingNumber = "";
-		this.callDiagnosticDestination = "";
+		clearCallDiagnosticConfig();
 		this.callDiagnosticStatus = Constant.CALL_DIAGNOSTICS_NOT_DIALED;
 		this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
 		this.callDiagnosticReleaseCause = Constant.NOT_AVAILABLE;
@@ -582,12 +581,17 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 				this.callDiagnosticStatus = Constant.CALL_DIAGNOSTICS_DISCONNECTED;
 				this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
 				this.callDiagnosticSessionId = null;
+				clearCallDiagnosticConfig();
 				return;
 			}
 			this.callDiagnosticStatus = status.getCallStatus();
-			this.callDiagnosticCallId = Constant.CALL_DIAGNOSTICS_DISCONNECTED.equals(this.callDiagnosticStatus)
-					? Constant.NOT_AVAILABLE
-					: Util.getDefaultValueForNullData(status.getCallId(), false);
+			if (Constant.CALL_DIAGNOSTICS_DISCONNECTED.equals(this.callDiagnosticStatus)) {
+				this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
+				clearCallDiagnosticConfig();
+			} else {
+				this.callDiagnosticCallId = Util.getDefaultValueForNullData(status.getCallId(), false);
+				refreshCallDiagnosticConfig();
+			}
 			this.callDiagnosticReleaseCause = Util.getDefaultValueForNullData(status.getReleaseCause(), false);
 		} catch (DataConversionException e) {
 			this.logger.error("Failed to parse test call status response from %s".formatted(statusUri), e);
@@ -598,17 +602,72 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			this.callDiagnosticStatus = Constant.CALL_DIAGNOSTICS_DISCONNECTED;
 			this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
 			this.callDiagnosticSessionId = null;
+			clearCallDiagnosticConfig();
 		}
+	}
+
+	/**
+	 * Fetches the device's own record of the dialed-call parameters ({@code calledNumber}/
+	 * {@code callingNumber}/{@code destAddress}) for the current test call session via
+	 * {@code GET /sipTestCall/show}, and updates {@link #callDiagnosticCalledNumber}/
+	 * {@link #callDiagnosticCallingNumber}/{@link #callDiagnosticDestination} to match, so these
+	 * reflect the device's authoritative data rather than staying frozen at whatever was staged
+	 * locally before {@code Start} was pressed. A missing/malformed response leaves the
+	 * previously known values intact for this cycle rather than blanking them out.
+	 *
+	 * @throws FailedLoginException if the request fails due to authentication issues
+	 */
+	private void refreshCallDiagnosticConfig() throws FailedLoginException {
+		String showUri = UriComponentsBuilder.fromUriString(Constant.TEST_CALL_SHOW_API)
+				.queryParam(Constant.SESSION_ID_PARAM, this.callDiagnosticSessionId)
+				.build().toUriString();
+		try {
+			TestCallConfig config = fetchAndConvert(showUri, TestCallConfig.class);
+			if (config == null) {
+				return;
+			}
+			this.callDiagnosticCalledNumber = config.getCalledNumber() != null ? config.getCalledNumber() : "";
+			this.callDiagnosticCallingNumber = config.getCallingNumber() != null ? config.getCallingNumber() : "";
+			this.callDiagnosticDestination = config.getDestAddress() != null ? config.getDestAddress() : "";
+		} catch (DataConversionException e) {
+			this.logger.error("Failed to parse test call config response from %s".formatted(showUri), e);
+		} catch (FailedLoginException e) {
+			throw e;
+		} catch (Exception e) {
+			this.logger.warn("Failed to refresh test call config from %s; keeping previously known values".formatted(showUri), e);
+		}
+	}
+
+	/**
+	 * Blanks the staged/echoed {@code CalledNumber}/{@code CallingNumber}/{@code Destination}
+	 * values - called once a test call session is confirmed ended, so these text controls don't
+	 * keep showing a previous call's data once it's no longer available on the device.
+	 */
+	private void clearCallDiagnosticConfig() {
+		this.callDiagnosticCalledNumber = "";
+		this.callDiagnosticCallingNumber = "";
+		this.callDiagnosticDestination = "";
 	}
 
 	/**
 	 * Dials a new SIP test call using the currently staged {@link #callDiagnosticCalledNumber}/
 	 * {@link #callDiagnosticCallingNumber}/{@link #callDiagnosticDestination} values, then immediately
 	 * delegates to {@link #refreshCallDiagnosticStatus()} to capture the initial state.
+	 * <p>
+	 * Per the device's {@code POST /sipTestCall/dial} contract, {@code calledNumber} and
+	 * {@code callingNumber} are always required, and a destination is required via either
+	 * {@code destAddress} or {@code destIpGroup} - this adapter only exposes the former
+	 * ({@code CallDiagnostic#Destination}), so all three staged fields are required here.
 	 *
-	 * @throws Exception if the dial request fails, or returns no session id
+	 * @throws IllegalArgumentException if any of the three staged fields is blank
+	 * @throws Exception                if the dial request fails, or returns no session id
 	 */
 	private void startCallDiagnostic() throws Exception {
+		if (StringUtils.isNullOrEmpty(this.callDiagnosticCalledNumber, true)
+				|| StringUtils.isNullOrEmpty(this.callDiagnosticCallingNumber, true)
+				|| StringUtils.isNullOrEmpty(this.callDiagnosticDestination, true)) {
+			throw new IllegalArgumentException("CalledNumber, CallingNumber and Destination must all be set before starting a test call");
+		}
 		Map<String, Object> body = new HashMap<>();
 		body.put("calledNumber", this.callDiagnosticCalledNumber);
 		body.put("callingNumber", this.callDiagnosticCallingNumber);
@@ -643,6 +702,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		this.callDiagnosticStatus = Constant.CALL_DIAGNOSTICS_DISCONNECTED;
 		this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
 		this.callDiagnosticSessionId = null;
+		clearCallDiagnosticConfig();
 	}
 
 	/**

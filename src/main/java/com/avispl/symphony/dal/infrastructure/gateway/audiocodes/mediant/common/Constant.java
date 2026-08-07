@@ -47,6 +47,7 @@ public class Constant {
 	public static final String CALL_STATS_KPI_API = "/kpi/current/sbc/callStats/global";
 	public static final String TEST_CALL_DIAL_API = "/sipTestCall/dial";
 	public static final String TEST_CALL_STATUS_API = "/sipTestCall/getStatus";
+	public static final String TEST_CALL_SHOW_API = "/sipTestCall/show";
 	public static final String TEST_CALL_DROP_API = "/sipTestCall/drop";
 	public static final String SESSION_ID_PARAM = "sessionId";
 
