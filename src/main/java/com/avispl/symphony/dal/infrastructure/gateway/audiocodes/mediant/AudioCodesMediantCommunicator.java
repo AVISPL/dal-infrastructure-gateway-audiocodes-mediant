@@ -566,9 +566,12 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * {@link #callDiagnosticCallId} is reset to {@link Constant#NOT_AVAILABLE} too, since the call the id
 	 * referred to is over; {@link #callDiagnosticReleaseCause} is left as-is so the reason for the
 	 * disconnect (typically captured on the poll where the device first reported {@code Disconnected},
-	 * before the session expired per the device's {@code keepResultTimeout}) remains visible. A
-	 * malformed-but-present response is logged and otherwise ignored, leaving all previous values intact
-	 * for this cycle.
+	 * before the session expired per the device's {@code keepResultTimeout}) remains visible.
+	 * {@link #callDiagnosticCalledNumber}/{@link #callDiagnosticCallingNumber}/{@link #callDiagnosticDestination}
+	 * are deliberately left untouched here too - once a call ends they keep showing what was dialed
+	 * until the caller stages new values or the adapter is destroyed, rather than blanking out on
+	 * disconnect. A malformed-but-present response is logged and otherwise ignored, leaving all previous
+	 * values intact for this cycle.
 	 *
 	 * @throws FailedLoginException if authentication fails
 	 */
@@ -582,16 +585,10 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 				this.callDiagnosticStatus = Constant.CALL_DIAGNOSTICS_DISCONNECTED;
 				this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
 				this.callDiagnosticSessionId = null;
-				clearCallDiagnosticConfig();
 				return;
 			}
 			this.callDiagnosticStatus = status.getCallStatus();
 			if (Constant.CALL_DIAGNOSTICS_DISCONNECTED.equals(this.callDiagnosticStatus)) {
-				//	Deliberately not clearing calledNumber/callingNumber/destination here: the device keeps
-				//	this session (and thus keeps returning this same Disconnected status) around for its
-				//	keepResultTimeout, so this branch would otherwise re-fire and clobber values the caller
-				//	is already staging for the next call on every single poll during that window. They're
-				//	only cleared once the session is fully torn down (sessionId nulled below/elsewhere).
 				this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
 			} else {
 				this.callDiagnosticCallId = Util.getDefaultValueForNullData(status.getCallId(), false);
@@ -607,7 +604,6 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			this.callDiagnosticStatus = Constant.CALL_DIAGNOSTICS_DISCONNECTED;
 			this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
 			this.callDiagnosticSessionId = null;
-			clearCallDiagnosticConfig();
 		}
 	}
 
@@ -645,8 +641,9 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 
 	/**
 	 * Blanks the staged/echoed {@code CalledNumber}/{@code CallingNumber}/{@code Destination}
-	 * values - called once a test call session is confirmed ended, so these text controls don't
-	 * keep showing a previous call's data once it's no longer available on the device.
+	 * values. Only called from {@link #internalDestroy()} - once a test call ends, these are
+	 * deliberately left in place (reflecting the last dialed/echoed values) until the caller
+	 * stages new ones via {@link #controlProperty} or the adapter instance is destroyed.
 	 */
 	private void clearCallDiagnosticConfig() {
 		this.callDiagnosticCalledNumber = "";
@@ -707,7 +704,6 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		this.callDiagnosticStatus = Constant.CALL_DIAGNOSTICS_DISCONNECTED;
 		this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
 		this.callDiagnosticSessionId = null;
-		clearCallDiagnosticConfig();
 	}
 
 	/**
