@@ -81,4 +81,9 @@ public class Constant {
 	public static final String CALL_DIAGNOSTICS_CALL_ID = "CallID";
 	public static final String CALL_DIAGNOSTICS_RELEASE_CAUSE = "ReleaseCause";
 
+	//	Max lengths per the device's sipTestCall/dial contract
+	public static final int CALL_DIAGNOSTICS_CALLED_NUMBER_MAX_LENGTH = 61;
+	public static final int CALL_DIAGNOSTICS_CALLING_NUMBER_MAX_LENGTH = 61;
+	public static final int CALL_DIAGNOSTICS_DESTINATION_MAX_LENGTH = 50;
+
 }
