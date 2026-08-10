@@ -18,7 +18,7 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum CallRoutingStatsProperty implements KpiProperty {
-	NO_ROUTE_CALLS_IN("NoRouteCallsIn", "noRouteCallsIn");
+	NO_ROUTE_CALLS_IN_TOTAL("NoRouteCallsInTotal", "noRouteCallsInTotal");
 
 	private final String name;
 	private final String kpiId;

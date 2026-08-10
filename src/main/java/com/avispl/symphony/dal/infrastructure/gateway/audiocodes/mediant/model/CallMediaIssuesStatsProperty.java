@@ -18,8 +18,8 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum CallMediaIssuesStatsProperty implements KpiProperty {
-	MEDIA_MISMATCH_CALLS_IN("MediaMismatchCallsIn", "mediaMismatchCallsIn"),
-	MEDIA_MISMATCH_CALLS_OUT("MediaMismatchCallsOut", "mediaMismatchCallsOut");
+	MEDIA_MISMATCH_CALLS_IN_TOTAL("MediaMismatchCallsInTotal", "mediaMismatchCallsInTotal"),
+	MEDIA_MISMATCH_CALLS_OUT_TOTAL("MediaMismatchCallsOutTotal", "mediaMismatchCallsOutTotal");
 
 	private final String name;
 	private final String kpiId;
