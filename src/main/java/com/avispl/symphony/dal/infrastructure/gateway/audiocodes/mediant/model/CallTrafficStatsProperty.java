@@ -18,8 +18,10 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum CallTrafficStatsProperty implements KpiProperty {
+	ATTEMPTED_CALLS_RATE_IN("AttemptedCallsRateIn(cps)", "attemptedCallsRateIn"),
 	ATTEMPTED_CALLS_RATE_OUT("AttemptedCallsRateOut(cps)", "attemptedCallsRateOut"),
-	NO_ANSWER_CALLS_IN_TOTAL("NoAnswerCallsInTotal", "noAnswerCallsInTotal");
+	NO_ANSWER_CALLS_IN_TOTAL("NoAnswerCallsInTotal", "noAnswerCallsInTotal"),
+	NO_ANSWER_CALLS_OUT_TOTAL("NoAnswerCallsOutTotal", "noAnswerCallsOutTotal");
 
 	private final String name;
 	private final String kpiId;
