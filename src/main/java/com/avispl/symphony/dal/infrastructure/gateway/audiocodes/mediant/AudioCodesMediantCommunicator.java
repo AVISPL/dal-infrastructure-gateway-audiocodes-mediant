@@ -208,11 +208,11 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			String stopKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_STOP;
 
 			if (calledNumberKey.equals(property)) {
-				this.callDiagnosticCalledNumber = String.valueOf(value);
+				this.callDiagnosticCalledNumber = validateMaxLength(String.valueOf(value), Constant.CALL_DIAGNOSTICS_CALLED_NUMBER, Constant.CALL_DIAGNOSTICS_CALLED_NUMBER_MAX_LENGTH);
 			} else if (callingNumberKey.equals(property)) {
-				this.callDiagnosticCallingNumber = String.valueOf(value);
+				this.callDiagnosticCallingNumber = validateMaxLength(String.valueOf(value), Constant.CALL_DIAGNOSTICS_CALLING_NUMBER, Constant.CALL_DIAGNOSTICS_CALLING_NUMBER_MAX_LENGTH);
 			} else if (destinationKey.equals(property)) {
-				this.callDiagnosticDestination = String.valueOf(value);
+				this.callDiagnosticDestination = validateMaxLength(String.valueOf(value), Constant.CALL_DIAGNOSTICS_DESTINATION, Constant.CALL_DIAGNOSTICS_DESTINATION_MAX_LENGTH);
 			} else if (startKey.equals(property)) {
 				startCallDiagnostic();
 			} else if (stopKey.equals(property)) {
@@ -251,6 +251,23 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		for (ControllableProperty controllableProperty : controllableProperties) {
 			controlProperty(controllableProperty);
 		}
+	}
+
+	/**
+	 * Rejects a staged {@code CallDiagnostics} value that exceeds the device's {@code sipTestCall/dial}
+	 * length limit for the given field.
+	 *
+	 * @param value     the staged value to validate
+	 * @param fieldName the field's display name, for the error message
+	 * @param maxLength the field's maximum allowed length
+	 * @return {@code value}, unchanged
+	 * @throws IllegalArgumentException if {@code value} exceeds {@code maxLength}
+	 */
+	private String validateMaxLength(String value, String fieldName, int maxLength) {
+		if (value.length() > maxLength) {
+			throw new IllegalArgumentException("%s must not exceed %d characters".formatted(fieldName, maxLength));
+		}
+		return value;
 	}
 
 	/**
