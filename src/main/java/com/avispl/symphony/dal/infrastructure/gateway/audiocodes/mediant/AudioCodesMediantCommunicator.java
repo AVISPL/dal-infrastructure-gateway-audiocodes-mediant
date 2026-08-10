@@ -691,7 +691,10 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	}
 
 	/**
-	 * Drops the currently active test call session, if any, and resets the cached status/session id.
+	 * Drops the currently active test call session, if any, then re-fetches its status from the
+	 * device via {@link #refreshCallDiagnosticStatus()} - rather than assuming/hardcoding the result -
+	 * so {@link #callDiagnosticReleaseCause} picks up the device's actual post-drop release cause
+	 * (e.g. {@code RELEASE_BECAUSE_MANUAL_DISC}) exactly like a call the device disconnected on its own.
 	 *
 	 * @throws Exception if the drop request fails
 	 */
@@ -704,9 +707,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 				.queryParam(Constant.SESSION_ID_PARAM, this.callDiagnosticSessionId)
 				.build().toUriString();
 		this.performDelete(dropUri);
-		this.callDiagnosticStatus = Constant.CALL_DIAGNOSTICS_DISCONNECTED;
-		this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
-		this.callDiagnosticSessionId = null;
+		refreshCallDiagnosticStatus();
 	}
 
 	/**
