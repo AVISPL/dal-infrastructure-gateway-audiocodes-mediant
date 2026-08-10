@@ -563,10 +563,11 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * over: {@link #callDiagnosticStatus} is reset to {@link Constant#CALL_DIAGNOSTICS_DISCONNECTED} and
 	 * {@link #callDiagnosticSessionId} is cleared, same as a manual {@link #stopCallDiagnostic()}. Once
 	 * the status is {@code Disconnected} - whether reported by the device or inferred here -
-	 * {@link #callDiagnosticCallId} is reset to {@link Constant#NOT_AVAILABLE} too, since the call the id
-	 * referred to is over; {@link #callDiagnosticReleaseCause} is left as-is so the reason for the
-	 * disconnect (typically captured on the poll where the device first reported {@code Disconnected},
-	 * before the session expired per the device's {@code keepResultTimeout}) remains visible.
+	 * {@link #callDiagnosticCallId} and {@link #callDiagnosticReleaseCause} are reset to
+	 * {@link Constant#NOT_AVAILABLE} too, since neither is being reported by the device for this session
+	 * any more (the device only reports {@code releaseCause} for as long as it keeps the session around,
+	 * per its {@code keepResultTimeout}) - both stay in sync with what the device is currently reporting
+	 * rather than freezing at their last known value.
 	 * {@link #callDiagnosticCalledNumber}/{@link #callDiagnosticCallingNumber}/{@link #callDiagnosticDestination}
 	 * are deliberately left untouched here too - once a call ends they keep showing what was dialed
 	 * until the caller stages new values or the adapter is destroyed, rather than blanking out on
@@ -584,6 +585,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			if (status == null || status.getCallStatus() == null) {
 				this.callDiagnosticStatus = Constant.CALL_DIAGNOSTICS_DISCONNECTED;
 				this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
+				this.callDiagnosticReleaseCause = Constant.NOT_AVAILABLE;
 				this.callDiagnosticSessionId = null;
 				return;
 			}
@@ -603,6 +605,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			this.logger.warn("Failed to refresh test call status from %s; assuming the session has ended".formatted(statusUri), e);
 			this.callDiagnosticStatus = Constant.CALL_DIAGNOSTICS_DISCONNECTED;
 			this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
+			this.callDiagnosticReleaseCause = Constant.NOT_AVAILABLE;
 			this.callDiagnosticSessionId = null;
 		}
 	}
