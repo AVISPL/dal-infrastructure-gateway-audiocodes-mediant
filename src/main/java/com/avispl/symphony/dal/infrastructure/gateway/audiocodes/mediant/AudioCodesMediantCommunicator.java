@@ -96,13 +96,14 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	/**
 	 * Names of the optional statistics groups to pull from the device and display: the KPI-heavy
 	 * call-statistics groups (e.g. {@code CallLoadStatistics}, {@code CallRoutingStatistics}) and
-	 * {@link Constant#CALL_DIAGNOSTICS_GROUP}. Empty by default, meaning none of them are fetched -
-	 * each KPI group is a per-KPI request against the device, and {@code CallDiagnostics} involves its
-	 * own test-call session tracking, so groups the caller doesn't ask for are skipped entirely rather
-	 * than fetched and hidden. Including {@link Constant#CALL_STATS_ALL_GROUPS} enables every group
+	 * {@link Constant#CALL_DIAGNOSTICS_GROUP}. Defaults to {@link Constant#CALL_STATS_ALL_GROUPS},
+	 * meaning every group is fetched unless the caller narrows the list - each KPI group is a
+	 * per-KPI request against the device, and {@code CallDiagnostics} involves its own test-call
+	 * session tracking, so groups the caller doesn't ask for are skipped entirely rather than
+	 * fetched and hidden. Including {@link Constant#CALL_STATS_ALL_GROUPS} enables every group
 	 * regardless of what else is listed.
 	 */
-	private List<String> displayPropertyGroups = new ArrayList<>();
+	private List<String> displayPropertyGroups = new ArrayList<>(List.of(Constant.CALL_STATS_ALL_GROUPS));
 
 	/**
 	 * Jackson ObjectMapper for JSON deserialization. Initialized eagerly in the constructor
