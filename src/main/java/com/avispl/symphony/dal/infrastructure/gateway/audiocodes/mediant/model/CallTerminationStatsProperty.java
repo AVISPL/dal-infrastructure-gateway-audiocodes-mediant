@@ -20,7 +20,7 @@ import lombok.Getter;
 public enum CallTerminationStatsProperty implements KpiProperty {
 	ABNORMAL_TERMINATED_CALLS_IN_TOTAL("AbnormalTerminatedCallsInTotal", "abnormalTerminatedCallsInTotal"),
 	ABNORMAL_TERMINATED_CALLS_OUT_TOTAL("AbnormalTerminatedCallsOutTotal", "abnormalTerminatedCallsOutTotal"),
-	MEDIA_BROKEN_CONNECTION_CALLS("MediaBrokenConnectionCalls", "mediaBrokenConnectionCalls");
+	MEDIA_BROKEN_CONNECTION_CALLS_TOTAL("MediaBrokenConnectionCallsTotal", "mediaBrokenConnectionCallsTotal");
 
 	private final String name;
 	private final String kpiId;

@@ -18,10 +18,10 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum CallCapacityStatsProperty implements KpiProperty {
-	NO_RESOURCES_CALLS_IN("NoResourcesCallsIn", "noResourcesCallsIn"),
-	NO_RESOURCES_CALLS_OUT("NoResourcesCallsOut", "noResourcesCallsOut"),
-	ADMISSION_FAILED_CALLS_IN("AdmissionFailedCallsIn", "admissionFailedCallsIn"),
-	ADMISSION_FAILED_CALLS_OUT("AdmissionFailedCallsOut", "admissionFailedCallsOut");
+	NO_RESOURCES_CALLS_IN_TOTAL("NoResourcesCallsInTotal", "noResourcesCallsInTotal"),
+	NO_RESOURCES_CALLS_OUT_TOTAL("NoResourcesCallsOutTotal", "noResourcesCallsOutTotal"),
+	ADMISSION_FAILED_CALLS_IN_TOTAL("AdmissionFailedCallsInTotal", "admissionFailedCallsInTotal"),
+	ADMISSION_FAILED_CALLS_OUT_TOTAL("AdmissionFailedCallsOutTotal", "admissionFailedCallsOutTotal");
 
 	private final String name;
 	private final String kpiId;
