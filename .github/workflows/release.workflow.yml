@@ -56,5 +56,5 @@ jobs:
         run: echo "file=$(ls target/dal-infrastructure-gateway-audiocodes-mediant-${{ needs.versiongenerate.outputs.version }}.jar)" >> $GITHUB_OUTPUT
       - uses: actions/upload-artifact@v4
         with:
-          name: APCPDUCommunicator
+          name: AudioCodesMediantCommunicator
           path: ${{ steps.getfilename.outputs.file }}
