@@ -127,7 +127,8 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * {@link Constant#CALL_DIAGNOSTICS_GROUP}) to pull from the device and display, from a comma-separated
 	 * string. Groups not listed here are skipped entirely on every poll cycle - no request is made and no
 	 * stats are emitted for them. Passing {@link Constant#CALL_STATS_ALL_GROUPS} (alone or alongside other
-	 * names) enables every group.
+	 * names) enables every group. Any name not in {@link Constant#SUPPORTED_PROPERTY_GROUPS} is silently
+	 * dropped, so it's never reflected in {@code AdapterMetadata#ActivePropertyGroups}.
 	 *
 	 * @param displayPropertyGroups comma-separated group names; blank/empty clears the list (nothing displayed)
 	 */
@@ -139,6 +140,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		this.displayPropertyGroups = Arrays.stream(displayPropertyGroups.split(","))
 				.map(String::strip)
 				.filter(group -> !group.isEmpty())
+				.filter(Constant.SUPPORTED_PROPERTY_GROUPS::contains)
 				.collect(Collectors.toList());
 	}
 
