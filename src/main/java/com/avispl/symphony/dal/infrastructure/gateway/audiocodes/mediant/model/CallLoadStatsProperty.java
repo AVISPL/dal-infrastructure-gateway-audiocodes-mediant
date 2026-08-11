@@ -18,10 +18,12 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum CallLoadStatsProperty implements KpiProperty {
-	BUSY_CALLS_IN_TOTAL("BusyCallsInTotal", "busyCallsInTotal"),
-	BUSY_CALLS_OUT_TOTAL("BusyCallsOutTotal", "busyCallsOutTotal"),
-	ACTIVE_SESSIONS("ActiveSessions", "activeSessions");
+	BUSY_CALLS_IN_TOTAL("BusyCallsInTotal", "busyCallsInTotal", false),
+	BUSY_CALLS_OUT_TOTAL("BusyCallsOutTotal", "busyCallsOutTotal", false),
+	ACTIVE_SESSIONS("ActiveSessions", "activeSessions", true);
 
 	private final String name;
 	private final String kpiId;
+	/** @see KpiProperty#isGauge() */
+	private final boolean gauge;
 }

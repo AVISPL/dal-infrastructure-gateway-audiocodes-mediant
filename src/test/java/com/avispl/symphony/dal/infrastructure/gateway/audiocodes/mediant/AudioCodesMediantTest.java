@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.security.auth.login.FailedLoginException;
 import org.apache.commons.collections.MapUtils;
@@ -20,7 +21,9 @@ import org.junit.jupiter.api.Test;
 import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Constant;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.KpiProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Util;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallLoadStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallQualityStatsProperty;
 
 /**
@@ -85,11 +88,12 @@ class AudioCodesMediantTest {
 
 	/**
 	 * Note: gauge KPIs are reported as dynamic statistics and are therefore absent from the regular
-	 * statistics map. Every {@link CallQualityStatsProperty} KPI is a gauge, so CallQualityStatistics is
-	 * asserted against {@code getDynamicStatistics()} while the remaining groups - all cumulative counters -
-	 * are asserted against {@code getStatistics()}. If any other group's KPIs are later flipped to
-	 * {@code gauge = true}, move that group across too; a fully-gauge group's regular map is empty and
-	 * would trip the {@code isNotEmpty} assertion below.
+	 * statistics map. Every {@link CallQualityStatsProperty} KPI is a gauge, so CallQualityStatistics is the
+	 * only group asserted against {@code getDynamicStatistics()}. {@link CallLoadStatsProperty} is mixed -
+	 * ActiveSessions is a gauge, the two Total counters are not - so its regular map stays non-empty and it
+	 * is still asserted against {@code getStatistics()}, as are the remaining counter-only groups. If a
+	 * group's KPIs are ever <em>all</em> flipped to {@code gauge = true}, move it across too; a fully-gauge
+	 * group's regular map is empty and would trip the {@code isNotEmpty} assertion below.
 	 */
 	@Test
 	void testGetMultipleStatistics_withCallStatsGroups() throws Exception {
@@ -241,13 +245,19 @@ class AudioCodesMediantTest {
 
 	/**
 	 * The fully-qualified keys of every KPI declared as a gauge - i.e. the only keys allowed to reach
-	 * the dynamic statistics map.
+	 * the dynamic statistics map. Add a group here as soon as any of its KPIs is marked {@code gauge = true}.
 	 */
 	private Set<String> gaugeKeys() {
-		return Arrays.stream(CallQualityStatsProperty.values())
-				.filter(CallQualityStatsProperty::isGauge)
-				.map(property -> Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + property.getName())
+		return Stream.concat(
+						this.gaugeKeys(Constant.CALL_LOAD_STATISTICS_GROUP, CallLoadStatsProperty.values()),
+						this.gaugeKeys(Constant.CALL_QUALITY_STATISTICS_GROUP, CallQualityStatsProperty.values()))
 				.collect(Collectors.toSet());
+	}
+
+	private Stream<String> gaugeKeys(String groupName, KpiProperty[] properties) {
+		return Arrays.stream(properties)
+				.filter(KpiProperty::isGauge)
+				.map(property -> groupName + Constant.HASH + property.getName());
 	}
 
 	private List<String> callStatsGroups() {
