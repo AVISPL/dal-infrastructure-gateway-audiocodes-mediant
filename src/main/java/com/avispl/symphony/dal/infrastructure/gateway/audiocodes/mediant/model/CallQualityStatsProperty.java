@@ -18,12 +18,14 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum CallQualityStatsProperty implements KpiProperty {
-	ANSWER_SEIZURE_RATIO("AnswerSeizureRatio(%)", "answerSeizureRatio"),
-	NETWORK_EFFECTIVENESS_RATIO("NetworkEffectivenessRatio(%)", "networkEffectivenessRatio"),
-	FAILED_CALLS_IN_RATIO("FailedCallsInRatio(%)", "failedCallsInRatio"),
-	FAILED_CALLS_OUT_RATIO("FailedCallsOutRatio(%)", "failedCallsOutRatio"),
-	POST_DIAL_DELAY("PostDialDelay(sec)", "postDialDelay");
+	ANSWER_SEIZURE_RATIO("AnswerSeizureRatio(%)", "answerSeizureRatio", true),
+	NETWORK_EFFECTIVENESS_RATIO("NetworkEffectivenessRatio(%)", "networkEffectivenessRatio", true),
+	FAILED_CALLS_IN_RATIO("FailedCallsInRatio(%)", "failedCallsInRatio", true),
+	FAILED_CALLS_OUT_RATIO("FailedCallsOutRatio(%)", "failedCallsOutRatio", true),
+	POST_DIAL_DELAY("PostDialDelay(sec)", "postDialDelay", true);
 
 	private final String name;
 	private final String kpiId;
+	/** @see KpiProperty#isGauge() */
+	private final boolean gauge;
 }

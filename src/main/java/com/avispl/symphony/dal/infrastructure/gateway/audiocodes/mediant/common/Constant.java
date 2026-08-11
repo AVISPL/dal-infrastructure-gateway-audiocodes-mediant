@@ -42,8 +42,8 @@ public class Constant {
 	public final String STATUS_ENDPOINT = "/status";
 	public static final String ACTIVE_ALARMS_API = "/alarms/active";
 	public static final String ACTIVE_ALARM = "ActiveAlarms";
-	//	Base path for singular-entity SBC call-statistics KPIs; a specific KPI id is appended
-	//	(e.g. ".../busyCallsInTotal") per each Call*StatsProperty enum.
+	//	Scope-level endpoint for the SBC call-statistics KPIs. Returns every KPI in the scope as an
+	//	"items" array; each Call*StatsProperty enum resolves its own KPI by id from that one response.
 	public static final String CALL_STATS_KPI_API = "/kpi/current/sbc/callStats/global";
 	public static final String TEST_CALL_DIAL_API = "/sipTestCall/dial";
 	public static final String TEST_CALL_STATUS_API = "/sipTestCall/getStatus";

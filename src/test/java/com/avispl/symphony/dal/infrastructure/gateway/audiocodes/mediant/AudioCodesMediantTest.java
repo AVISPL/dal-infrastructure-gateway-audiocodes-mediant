@@ -3,8 +3,11 @@
  */
 package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant;
 
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import javax.security.auth.login.FailedLoginException;
@@ -17,6 +20,8 @@ import org.junit.jupiter.api.Test;
 import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Constant;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Util;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallQualityStatsProperty;
 
 /**
  * AudioCodesMediantTest class
@@ -78,20 +83,21 @@ class AudioCodesMediantTest {
 		networkGroup.forEach((pName, pValue) -> Assertions.assertTrue(this.isValidValue(pValue)));
 	}
 
+	/**
+	 * Note: gauge KPIs are reported as dynamic statistics and are therefore absent from the regular
+	 * statistics map. Every {@link CallQualityStatsProperty} KPI is a gauge, so CallQualityStatistics is
+	 * asserted against {@code getDynamicStatistics()} while the remaining groups - all cumulative counters -
+	 * are asserted against {@code getStatistics()}. If any other group's KPIs are later flipped to
+	 * {@code gauge = true}, move that group across too; a fully-gauge group's regular map is empty and
+	 * would trip the {@code isNotEmpty} assertion below.
+	 */
 	@Test
 	void testGetMultipleStatistics_withCallStatsGroups() throws Exception {
 		var statistics = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
-		List<String> callStatsGroups = List.of(
-				Constant.CALL_LOAD_STATISTICS_GROUP,
-				Constant.CALL_QUALITY_STATISTICS_GROUP,
-				Constant.CALL_TERMINATION_STATISTICS_GROUP,
-				Constant.CALL_MEDIA_ISSUES_STATISTICS_GROUP,
-				Constant.CALL_CAPACITY_STATISTICS_GROUP,
-				Constant.CALL_ROUTING_STATISTICS_GROUP,
-				Constant.CALL_TRAFFIC_STATISTICS_GROUP);
 
-		for (String group : callStatsGroups) {
-			var groupStats = this.filterGroupStatistics(statistics.getStatistics(), group);
+		for (String group : this.callStatsGroups()) {
+			boolean gaugeGroup = Constant.CALL_QUALITY_STATISTICS_GROUP.equals(group);
+			var groupStats = this.filterGroupStatistics(gaugeGroup ? statistics.getDynamicStatistics() : statistics.getStatistics(), group);
 			Assertions.assertTrue(MapUtils.isNotEmpty(groupStats), "Expected non-empty stats for group " + group);
 			groupStats.forEach((pName, pValue) -> Assertions.assertTrue(this.isValidValue(pValue)));
 		}
@@ -149,6 +155,110 @@ class AudioCodesMediantTest {
 			noDiagnosticsCommunicator.disconnect();
 			noDiagnosticsCommunicator.destroy();
 		}
+	}
+
+	@Test
+	void testGetMultipleStatistics_withGaugeKpisInDynamicStatistics() throws Exception {
+		var statistics = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
+
+		//	The device reports null for these when too few calls occurred in the sampling window, so assert the
+		//	routing rule rather than the presence of a sample: a gauge is either a numeric dynamic statistic or
+		//	an "N/A" regular one, and never both at once.
+		for (String gaugeKey : this.gaugeKeys()) {
+			boolean inDynamic = statistics.getDynamicStatistics().containsKey(gaugeKey);
+			boolean inRegular = statistics.getStatistics().containsKey(gaugeKey);
+			Assertions.assertNotEquals(inDynamic, inRegular, "A gauge KPI must appear in exactly one of the two maps: " + gaugeKey);
+			if (inDynamic) {
+				Assertions.assertTrue(Util.isNumeric(statistics.getDynamicStatistics().get(gaugeKey)),
+						"A dynamic statistic must be a numeric sample: " + gaugeKey);
+			} else {
+				Assertions.assertEquals(Constant.NOT_AVAILABLE, statistics.getStatistics().get(gaugeKey));
+			}
+		}
+	}
+
+	@Test
+	void testGetMultipleStatistics_withCounterKpisExcludedFromDynamicStatistics() throws Exception {
+		var statistics = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
+
+		statistics.getDynamicStatistics().keySet().forEach(key ->
+				Assertions.assertFalse(key.endsWith("Total"), "Cumulative counter must not be trended: " + key));
+		//	Nothing beyond the declared gauges may reach the dynamic map.
+		Assertions.assertTrue(this.gaugeKeys().containsAll(statistics.getDynamicStatistics().keySet()),
+				"Unexpected dynamic statistics: " + statistics.getDynamicStatistics().keySet());
+	}
+
+	@Test
+	void testGetMultipleStatistics_withNoGroupsEnabled() throws Exception {
+		var noGroupsCommunicator = new AudioCodesMediantCommunicator();
+		noGroupsCommunicator.setHost("localhost");
+		noGroupsCommunicator.setPort(8083);
+		noGroupsCommunicator.setLogin("admin");
+		noGroupsCommunicator.setPassword("admin");
+		noGroupsCommunicator.setDisplayPropertyGroups("");
+		noGroupsCommunicator.init();
+		try {
+			var statistics = (ExtendedStatistics) noGroupsCommunicator.getMultipleStatistics().get(0);
+			for (String group : this.callStatsGroups()) {
+				Assertions.assertTrue(MapUtils.isEmpty(this.filterGroupStatistics(statistics.getStatistics(), group)),
+						"No KPI should be reported for " + group + " when no group is enabled");
+			}
+			Assertions.assertTrue(MapUtils.isEmpty(statistics.getDynamicStatistics()),
+					"No dynamic statistics should be reported when no group is enabled");
+		} finally {
+			noGroupsCommunicator.disconnect();
+			noGroupsCommunicator.destroy();
+		}
+	}
+
+	/**
+	 * Covers the null-value routing rule directly: the device cannot be made to report a null KPI on demand,
+	 * so the live tests above can only assert whichever branch the device happens to exercise.
+	 */
+	@Test
+	void testPutKpiValue_withNullAndNumericValues() {
+		Map<String, String> stats = new HashMap<>();
+		Map<String, String> dynamicStats = new HashMap<>();
+
+		Util.putKpiValue(stats, dynamicStats, "Group#Gauge", null, true);
+		Assertions.assertEquals(Constant.NOT_AVAILABLE, stats.get("Group#Gauge"));
+		Assertions.assertFalse(dynamicStats.containsKey("Group#Gauge"), "A null gauge must be omitted from the dynamic map");
+
+		Util.putKpiValue(stats, dynamicStats, "Group#NonNumericGauge", "unavailable", true);
+		Assertions.assertFalse(dynamicStats.containsKey("Group#NonNumericGauge"), "A non-numeric gauge must be omitted from the dynamic map");
+
+		Util.putKpiValue(stats, dynamicStats, "Group#NumericGauge", "1.5", true);
+		Assertions.assertEquals("1.5", dynamicStats.get("Group#NumericGauge"));
+		Assertions.assertFalse(stats.containsKey("Group#NumericGauge"), "A trended gauge must not be duplicated into the regular map");
+
+		Util.putKpiValue(stats, dynamicStats, "Group#Counter", "42", false);
+		Assertions.assertEquals("42", stats.get("Group#Counter"));
+		Assertions.assertFalse(dynamicStats.containsKey("Group#Counter"), "A counter must never be trended");
+
+		Util.putKpiValue(stats, dynamicStats, "Group#NullCounter", null, false);
+		Assertions.assertEquals(Constant.NOT_AVAILABLE, stats.get("Group#NullCounter"));
+	}
+
+	/**
+	 * The fully-qualified keys of every KPI declared as a gauge - i.e. the only keys allowed to reach
+	 * the dynamic statistics map.
+	 */
+	private Set<String> gaugeKeys() {
+		return Arrays.stream(CallQualityStatsProperty.values())
+				.filter(CallQualityStatsProperty::isGauge)
+				.map(property -> Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + property.getName())
+				.collect(Collectors.toSet());
+	}
+
+	private List<String> callStatsGroups() {
+		return List.of(
+				Constant.CALL_LOAD_STATISTICS_GROUP,
+				Constant.CALL_QUALITY_STATISTICS_GROUP,
+				Constant.CALL_TERMINATION_STATISTICS_GROUP,
+				Constant.CALL_MEDIA_ISSUES_STATISTICS_GROUP,
+				Constant.CALL_CAPACITY_STATISTICS_GROUP,
+				Constant.CALL_ROUTING_STATISTICS_GROUP,
+				Constant.CALL_TRAFFIC_STATISTICS_GROUP);
 	}
 
 	private Map<String, String> filterGroupStatistics(Map<String, String> statistics, String groupName) {

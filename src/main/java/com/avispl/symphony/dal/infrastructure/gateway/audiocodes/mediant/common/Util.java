@@ -66,6 +66,53 @@ public final class Util {
 	}
 
 	/**
+	 * Routes a single KPI value into either the dynamic or the regular statistics map.
+	 * <p>
+	 * A gauge with a usable numeric value is reported as a dynamic statistic only; anything else -
+	 * a counter, or a gauge whose value is missing, {@code null} or non-numeric - is reported as a
+	 * regular statistic only (falling back to {@link Constant#NOT_AVAILABLE} via
+	 * {@link #getDefaultValueForNullData(String, boolean)}). A property therefore never appears in
+	 * both maps at once, and the dynamic map never receives a non-numeric sample: it is a timeline,
+	 * and {@code "N/A"} or a substituted {@code "0"} there would be indistinguishable from a real
+	 * reading. The device reports {@code null} for ratio/delay KPIs when too few calls occurred in
+	 * the sampling window, so a substituted zero would imply every call ended immediately.
+	 * <p>
+	 * To report gauges in both maps instead, drop the {@code else} - the regular {@code put} then
+	 * applies unconditionally.
+	 *
+	 * @param stats the regular statistics map
+	 * @param dynamicStats the dynamic (historical) statistics map
+	 * @param propertyKey the fully-qualified {@code <Group>#<Property>} key
+	 * @param value the raw value reported by the device; may be {@code null}
+	 * @param gauge whether this KPI is a gauge (see {@link com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.KpiProperty#isGauge()})
+	 */
+	public static void putKpiValue(Map<String, String> stats, Map<String, String> dynamicStats, String propertyKey, String value, boolean gauge) {
+		if (gauge && isNumeric(value)) {
+			dynamicStats.put(propertyKey, value.strip());
+		} else {
+			stats.put(propertyKey, getDefaultValueForNullData(value, false));
+		}
+	}
+
+	/**
+	 * Whether {@code value} can be read as a number, and is therefore usable as a timeline sample.
+	 *
+	 * @param value the value to test; may be {@code null}
+	 * @return {@code true} if {@code value} parses as a number
+	 */
+	public static boolean isNumeric(String value) {
+		if (StringUtils.isNullOrEmpty(value, true)) {
+			return false;
+		}
+		try {
+			Double.parseDouble(value.strip());
+			return true;
+		} catch (NumberFormatException e) {
+			return false;
+		}
+	}
+
+	/**
 	 * capitalize the first character of the string
 	 *
 	 * @param input input string

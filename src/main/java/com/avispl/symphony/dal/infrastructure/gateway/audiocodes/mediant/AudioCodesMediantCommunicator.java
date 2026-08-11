@@ -49,6 +49,7 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.C
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.Alarms;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.AlarmsResponse;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.KpiValue;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.KpiValuesResponse;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.TestCallConfig;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.TestCallDialResponse;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.TestCallStatus;
@@ -61,6 +62,28 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.d
  * @since 1.0.0
  */
 public class AudioCodesMediantCommunicator extends Communicator implements Monitorable, Controller {
+	/**
+	 * Pairs an optional call-statistics group with the KPI properties it displays.
+	 *
+	 * @param name the group name, gating and prefixing its properties
+	 * @param properties the KPI properties belonging to the group
+	 */
+	private record KpiGroup(String name, List<KpiProperty> properties) {}
+
+	/**
+	 * The optional call-statistics groups, declared once so that the {@link #displayPropertyGroups} gate and
+	 * the population loop cannot drift apart. All of these read from the same device scope
+	 * ({@link Constant#CALL_STATS_KPI_API}), which is why one request per poll cycle serves every group.
+	 */
+	private static final List<KpiGroup> CALL_STATS_GROUPS = List.of(
+			new KpiGroup(Constant.CALL_LOAD_STATISTICS_GROUP, List.of(CallLoadStatsProperty.values())),
+			new KpiGroup(Constant.CALL_QUALITY_STATISTICS_GROUP, List.of(CallQualityStatsProperty.values())),
+			new KpiGroup(Constant.CALL_TERMINATION_STATISTICS_GROUP, List.of(CallTerminationStatsProperty.values())),
+			new KpiGroup(Constant.CALL_MEDIA_ISSUES_STATISTICS_GROUP, List.of(CallMediaIssuesStatsProperty.values())),
+			new KpiGroup(Constant.CALL_CAPACITY_STATISTICS_GROUP, List.of(CallCapacityStatsProperty.values())),
+			new KpiGroup(Constant.CALL_ROUTING_STATISTICS_GROUP, List.of(CallRoutingStatsProperty.values())),
+			new KpiGroup(Constant.CALL_TRAFFIC_STATISTICS_GROUP, List.of(CallTrafficStatsProperty.values())));
+
 	private final ExtendedStatistics localExtendedStatistics = new ExtendedStatistics();
 	private final EndpointStatistics localEndpointStatistics = new EndpointStatistics();
 	private final ReentrantLock reentrantLock = new ReentrantLock();
@@ -177,14 +200,16 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		reentrantLock.lock();
 		try {
 			Map<String, String> stats = new HashMap<>();
+			Map<String, String> dynamicStats = new HashMap<>();
 			List<AdvancedControllableProperty> controls = new ArrayList<>();
 			this.setupData();
 			retrieveMetadata(stats);
 			retrieveDeviceStatus(stats);
-			retrieveCallStats(stats);
+			retrieveCallStats(stats, dynamicStats);
 			retrieveCallDiagnostics(stats, controls);
 			stats.putAll(Util.generateActiveAlarmsProperties(this.alarmsList));
 			this.localExtendedStatistics.setStatistics(stats);
+			this.localExtendedStatistics.setDynamicStatistics(dynamicStats);
 			this.localExtendedStatistics.setControllableProperties(controls);
 		} finally {
 			reentrantLock.unlock();
@@ -416,62 +441,102 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 
 	/**
 	 * Retrieves each optional call-statistics group whose name is present in {@link #displayPropertyGroups},
-	 * populating {@code stats} with a {@code <GroupName>#<PropertyName>} entry per KPI. Groups not listed
-	 * there are skipped entirely - no request is made for any of their KPIs.
+	 * populating {@code stats}/{@code dynamicStats} with a {@code <GroupName>#<PropertyName>} entry per KPI
+	 * (see {@link Util#putKpiValue}). Groups not listed there are skipped entirely, and if no group at all is
+	 * enabled no request is made.
+	 * <p>
+	 * Every group reads from the same device scope, so the whole scope is fetched <em>once</em> per poll cycle
+	 * and shared across all of them rather than issuing a request per KPI.
 	 *
-	 * @param stats the map to populate with property display names as keys
-	 * and their corresponding string values as values; must not be {@code null}
-	 * @throws FailedLoginException if a KPI request fails due to authentication issues
+	 * @param stats the map to populate with the regular (non-trended) properties; must not be {@code null}
+	 * @param dynamicStats the map to populate with the gauge properties; must not be {@code null}
+	 * @throws FailedLoginException if the KPI request fails due to authentication issues
 	 */
-	private void retrieveCallStats(Map<String, String> stats) throws FailedLoginException {
-		retrieveKpiGroup(stats, Constant.CALL_LOAD_STATISTICS_GROUP, CallLoadStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_QUALITY_STATISTICS_GROUP, CallQualityStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_TERMINATION_STATISTICS_GROUP, CallTerminationStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_MEDIA_ISSUES_STATISTICS_GROUP, CallMediaIssuesStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_CAPACITY_STATISTICS_GROUP, CallCapacityStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_ROUTING_STATISTICS_GROUP, CallRoutingStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_TRAFFIC_STATISTICS_GROUP, CallTrafficStatsProperty.values());
+	private void retrieveCallStats(Map<String, String> stats, Map<String, String> dynamicStats) throws FailedLoginException {
+		List<KpiGroup> enabledGroups = CALL_STATS_GROUPS.stream()
+				.filter(group -> isGroupEnabled(group.name()))
+				.toList();
+		if (enabledGroups.isEmpty()) {
+			return;
+		}
+		Map<String, String> kpiValues = fetchCallStatsScope();
+		for (KpiGroup group : enabledGroups) {
+			populateKpiGroup(stats, dynamicStats, group, kpiValues);
+		}
 	}
 
 	/**
-	 * Retrieves every {@code property} belonging to {@code groupName} from the device's SBC call-statistics
-	 * KPI endpoint, populating {@code stats} with a {@code <groupName>#<PropertyName>} entry for each - but
-	 * only if {@code groupName} (or {@link Constant#CALL_STATS_ALL_GROUPS}) is present in
-	 * {@link #displayPropertyGroups}; otherwise this is a no-op and no request is made.
+	 * Fetches the whole SBC call-statistics KPI scope in a single request and indexes it by {@code kpiId}.
 	 * <p>
-	 * Each KPI is fetched independently via its own request. A {@code null} response (no content) is
-	 * treated as an authoritative zero. Any failure to fetch or parse a given KPI - a malformed response
-	 * ({@link DataConversionException}) or any other error (e.g. the device not recognizing this particular
-	 * {@code kpiId}) - is logged and reported as {@link Constant#NOT_AVAILABLE} for that single KPI, without
-	 * affecting the rest of the group or aborting the poll cycle.
+	 * Returns an empty map - rather than throwing - for every non-authentication failure mode: a
+	 * {@code 204 No Content} response (which the device returns for a scope absent on this hardware
+	 * variant), a malformed payload ({@link DataConversionException}), or any other error. Callers then
+	 * resolve every KPI to {@link Constant#NOT_AVAILABLE} uniformly, so an unavailable scope degrades the
+	 * call-statistics groups without aborting the poll cycle or affecting any other group.
+	 * <p>
+	 * Note that this couples the fate of all call-statistics KPIs together: a single failed request now
+	 * blanks every KPI in every enabled group, where the previous per-KPI fetch could degrade one KPI in
+	 * isolation. That is the trade for collapsing the request count from one-per-KPI to one-per-cycle.
 	 *
-	 * @param <T>        the {@link KpiProperty} enum type for this group
-	 * @param stats      the map to populate with property display names as keys
-	 * @param groupName  the group name gating and prefixing these properties
-	 * @param properties the KPI properties belonging to this group
-	 * @throws FailedLoginException if a KPI request fails due to authentication issues
+	 * @return {@code kpiId} to raw value, or an empty map if the scope could not be read
+	 * @throws FailedLoginException if the request fails due to authentication issues
 	 */
-	private <T extends Enum<T> & KpiProperty> void retrieveKpiGroup(Map<String, String> stats, String groupName, T[] properties) throws FailedLoginException {
-		if (!this.displayPropertyGroups.contains(Constant.CALL_STATS_ALL_GROUPS) && !this.displayPropertyGroups.contains(groupName)) {
-			return;
-		}
-		for (T property : properties) {
-			String uri = Constant.CALL_STATS_KPI_API + Constant.SLASH + property.getKpiId();
-			String value;
-			try {
-				KpiValue kpi = fetchAndConvert(uri, KpiValue.class);
-				value = kpi == null ? "0" : kpi.getValue();
-			} catch (DataConversionException e) {
-				this.logger.error("Failed to parse the '%s' KPI response from %s".formatted(property.getKpiId(), uri), e);
-				value = null;
-			} catch (FailedLoginException e) {
-				throw e;
-			} catch (Exception e) {
-				this.logger.error("Failed to fetch the '%s' KPI from %s".formatted(property.getKpiId(), uri), e);
-				value = null;
+	private Map<String, String> fetchCallStatsScope() throws FailedLoginException {
+		try {
+			KpiValuesResponse response = fetchAndConvert(Constant.CALL_STATS_KPI_API, KpiValuesResponse.class);
+			if (response == null || response.getItems() == null) {
+				this.logger.warn("No call statistics KPIs returned from %s; reporting them as unavailable".formatted(Constant.CALL_STATS_KPI_API));
+				return Map.of();
 			}
-			stats.put(groupName + Constant.HASH + property.getName(), Util.getDefaultValueForNullData(value, false));
+			//	Built by hand rather than Collectors.toMap: a duplicate id in the response would make the
+			//	latter throw, turning a benign device quirk into a total failure of every KPI group.
+			Map<String, String> kpiValues = new HashMap<>();
+			for (KpiValue item : response.getItems()) {
+				if (item.getId() != null) {
+					kpiValues.put(item.getId(), item.getValue());
+				}
+			}
+			return kpiValues;
+		} catch (DataConversionException e) {
+			this.logger.error("Failed to parse the call statistics KPI response from %s".formatted(Constant.CALL_STATS_KPI_API), e);
+			return Map.of();
+		} catch (FailedLoginException e) {
+			throw e;
+		} catch (Exception e) {
+			this.logger.error("Failed to fetch the call statistics KPIs from %s".formatted(Constant.CALL_STATS_KPI_API), e);
+			return Map.of();
 		}
+	}
+
+	/**
+	 * Populates {@code stats}/{@code dynamicStats} with a {@code <groupName>#<PropertyName>} entry for every
+	 * property in {@code group}, resolving each one by {@code kpiId} against an already-fetched scope.
+	 * <p>
+	 * A {@code kpiId} absent from {@code kpiValues} - because the device does not report it, or because the
+	 * scope could not be read at all - is handled exactly like a {@code null} value: reported as
+	 * {@link Constant#NOT_AVAILABLE} in {@code stats}, and omitted from {@code dynamicStats}.
+	 *
+	 * @param stats the map to populate with the regular (non-trended) properties
+	 * @param dynamicStats the map to populate with the gauge properties
+	 * @param group the group being populated, supplying the key prefix and its KPI properties
+	 * @param kpiValues the fetched scope, indexed by {@code kpiId}
+	 */
+	private void populateKpiGroup(Map<String, String> stats, Map<String, String> dynamicStats, KpiGroup group, Map<String, String> kpiValues) {
+		for (KpiProperty property : group.properties()) {
+			String propertyKey = group.name() + Constant.HASH + property.getName();
+			Util.putKpiValue(stats, dynamicStats, propertyKey, kpiValues.get(property.getKpiId()), property.isGauge());
+		}
+	}
+
+	/**
+	 * Whether {@code groupName} should be pulled from the device and displayed - i.e. it is listed in
+	 * {@link #displayPropertyGroups}, either by name or via {@link Constant#CALL_STATS_ALL_GROUPS}.
+	 *
+	 * @param groupName the group to test
+	 * @return {@code true} if the group is enabled
+	 */
+	private boolean isGroupEnabled(String groupName) {
+		return this.displayPropertyGroups.contains(Constant.CALL_STATS_ALL_GROUPS) || this.displayPropertyGroups.contains(groupName);
 	}
 
 	/**
@@ -518,7 +583,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * @throws FailedLoginException if refreshing the test call status fails due to authentication issues
 	 */
 	private void retrieveCallDiagnostics(Map<String, String> stats, List<AdvancedControllableProperty> controls) throws FailedLoginException {
-		if (!this.displayPropertyGroups.contains(Constant.CALL_STATS_ALL_GROUPS) && !this.displayPropertyGroups.contains(Constant.CALL_DIAGNOSTICS_GROUP)) {
+		if (!isGroupEnabled(Constant.CALL_DIAGNOSTICS_GROUP)) {
 			return;
 		}
 		if (this.callDiagnosticSessionId != null) {
