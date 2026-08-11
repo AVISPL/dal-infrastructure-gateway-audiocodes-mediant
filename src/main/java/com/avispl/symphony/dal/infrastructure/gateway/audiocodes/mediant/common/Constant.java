@@ -3,6 +3,8 @@
  */
 package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common;
 
+import java.util.Set;
+
 import lombok.experimental.UtilityClass;
 
 /**
@@ -68,6 +70,17 @@ public class Constant {
 	public static final String CALL_CAPACITY_STATISTICS_GROUP = "CallCapacityStatistics";
 	public static final String CALL_ROUTING_STATISTICS_GROUP = "CallRoutingStatistics";
 	public static final String CALL_TRAFFIC_STATISTICS_GROUP = "CallTrafficStatistics";
+	//	Every value displayPropertyGroups is allowed to contain; anything else is unsupported and dropped.
+	public static final Set<String> SUPPORTED_PROPERTY_GROUPS = Set.of(
+			CALL_STATS_ALL_GROUPS,
+			CALL_DIAGNOSTICS_GROUP,
+			CALL_LOAD_STATISTICS_GROUP,
+			CALL_QUALITY_STATISTICS_GROUP,
+			CALL_TERMINATION_STATISTICS_GROUP,
+			CALL_MEDIA_ISSUES_STATISTICS_GROUP,
+			CALL_CAPACITY_STATISTICS_GROUP,
+			CALL_ROUTING_STATISTICS_GROUP,
+			CALL_TRAFFIC_STATISTICS_GROUP);
 
 	//	CallDiagnostics group properties
 	public static final String CALL_DIAGNOSTICS_CALLED_NUMBER = "CalledNumber";
