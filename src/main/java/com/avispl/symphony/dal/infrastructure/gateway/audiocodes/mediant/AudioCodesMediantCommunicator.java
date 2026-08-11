@@ -145,6 +145,17 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	}
 
 	/**
+	 * Whether {@code groupName} should be fetched/displayed this cycle - either it's explicitly
+	 * listed in {@link #displayPropertyGroups}, or {@link Constant#CALL_STATS_ALL_GROUPS} is.
+	 *
+	 * @param groupName the group to check
+	 * @return {@code true} if the group is enabled
+	 */
+	private boolean isGroupEnabled(String groupName) {
+		return this.displayPropertyGroups.contains(Constant.CALL_STATS_ALL_GROUPS) || this.displayPropertyGroups.contains(groupName);
+	}
+
+	/**
 	 * {@inheritDoc}
 	 */
 	@Override
@@ -180,12 +191,14 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		try {
 			Map<String, String> stats = new HashMap<>();
 			List<AdvancedControllableProperty> controls = new ArrayList<>();
-			this.setupData();
 			retrieveMetadata(stats);
 			retrieveDeviceStatus(stats);
 			retrieveCallStats(stats);
 			retrieveCallDiagnostics(stats, controls);
-			stats.putAll(Util.generateActiveAlarmsProperties(this.alarmsList));
+			if (isGroupEnabled(Constant.ACTIVE_ALARM)) {
+				this.setupData();
+				stats.putAll(Util.generateActiveAlarmsProperties(this.alarmsList));
+			}
 			this.localExtendedStatistics.setStatistics(stats);
 			this.localExtendedStatistics.setControllableProperties(controls);
 		} finally {
@@ -427,10 +440,12 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			var value = GeneralProperty.getPropertyValue(property, deviceStatus);
 			stats.put(property.getDisplayName(), Util.getDefaultValueForNullData(value));
 		});
-		Arrays.stream(NetworkProperty.values()).forEach(property -> {
-			var value = NetworkProperty.getPropertyValue(property, deviceStatus);
-			stats.put(property.getDisplayName(), Util.getDefaultValueForNullData(value, false));
-		});
+		if (isGroupEnabled(Constant.NETWORK_GROUP)) {
+			Arrays.stream(NetworkProperty.values()).forEach(property -> {
+				var value = NetworkProperty.getPropertyValue(property, deviceStatus);
+				stats.put(property.getDisplayName(), Util.getDefaultValueForNullData(value, false));
+			});
+		}
 	}
 
 	/**
@@ -471,7 +486,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * @throws FailedLoginException if a KPI request fails due to authentication issues
 	 */
 	private <T extends Enum<T> & KpiProperty> void retrieveKpiGroup(Map<String, String> stats, String groupName, T[] properties) throws FailedLoginException {
-		if (!this.displayPropertyGroups.contains(Constant.CALL_STATS_ALL_GROUPS) && !this.displayPropertyGroups.contains(groupName)) {
+		if (!isGroupEnabled(groupName)) {
 			return;
 		}
 		for (T property : properties) {
@@ -537,7 +552,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * @throws FailedLoginException if refreshing the test call status fails due to authentication issues
 	 */
 	private void retrieveCallDiagnostics(Map<String, String> stats, List<AdvancedControllableProperty> controls) throws FailedLoginException {
-		if (!this.displayPropertyGroups.contains(Constant.CALL_STATS_ALL_GROUPS) && !this.displayPropertyGroups.contains(Constant.CALL_DIAGNOSTICS_GROUP)) {
+		if (!isGroupEnabled(Constant.CALL_DIAGNOSTICS_GROUP)) {
 			return;
 		}
 		if (this.callDiagnosticSessionId != null) {
