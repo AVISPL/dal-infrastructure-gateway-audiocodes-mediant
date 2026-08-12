@@ -44,9 +44,16 @@ public class Constant {
 	public final String STATUS_ENDPOINT = "/status";
 	public static final String ACTIVE_ALARMS_API = "/alarms/active";
 	public static final String ACTIVE_ALARM = "ActiveAlarms";
-	//	Base path for singular-entity SBC call-statistics KPIs; a specific KPI id is appended
-	//	(e.g. ".../busyCallsInTotal") per each Call*StatsProperty enum.
+	//	Base paths for the device's singular-entity KPI scopes; a specific KPI id is appended
+	//	(e.g. ".../busyCallsInTotal") per each *StatsProperty enum. Each constant is named after the
+	//	device scope it addresses, which does not always match the display group it feeds - notably
+	//	SBC_OTHER_STATS_KPI_API backs REGISTRATION_STATISTICS_GROUP.
 	public static final String CALL_STATS_KPI_API = "/kpi/current/sbc/callStats/global";
+	public static final String MEDIA_STATS_KPI_API = "/kpi/current/media/mediaStats/global";
+	public static final String MEDIA_DSP_STATS_KPI_API = "/kpi/current/media/dspStats/global";
+	public static final String MEDIA_CLUSTER_STATS_KPI_API = "/kpi/current/media/clusterStats/global";
+	public static final String SBC_OTHER_STATS_KPI_API = "/kpi/current/sbc/otherStats/global";
+	public static final String SIP_REC_STATS_KPI_API = "/kpi/current/sbc/sipRecStats/global";
 	public static final String TEST_CALL_DIAL_API = "/sipTestCall/dial";
 	public static final String TEST_CALL_STATUS_API = "/sipTestCall/getStatus";
 	public static final String TEST_CALL_SHOW_API = "/sipTestCall/show";
@@ -70,6 +77,11 @@ public class Constant {
 	public static final String CALL_CAPACITY_STATISTICS_GROUP = "CallCapacityStatistics";
 	public static final String CALL_ROUTING_STATISTICS_GROUP = "CallRoutingStatistics";
 	public static final String CALL_TRAFFIC_STATISTICS_GROUP = "CallTrafficStatistics";
+	public static final String MEDIA_STATISTICS_GROUP = "MediaStatistics";
+	public static final String MEDIA_DSP_STATISTICS_GROUP = "MediaDspStatistics";
+	public static final String MEDIA_CLUSTER_STATISTICS_GROUP = "MediaClusterStatistics";
+	public static final String REGISTRATION_STATISTICS_GROUP = "RegistrationStatistics";
+	public static final String SIP_REC_STATISTICS_GROUP = "SipRecStatistics";
 	//	Every value displayPropertyGroups is allowed to contain; anything else is unsupported and dropped.
 	public static final Set<String> SUPPORTED_PROPERTY_GROUPS = Set.of(
 			CALL_STATS_ALL_GROUPS,
@@ -81,6 +93,11 @@ public class Constant {
 			CALL_CAPACITY_STATISTICS_GROUP,
 			CALL_ROUTING_STATISTICS_GROUP,
 			CALL_TRAFFIC_STATISTICS_GROUP,
+			MEDIA_STATISTICS_GROUP,
+			MEDIA_DSP_STATISTICS_GROUP,
+			MEDIA_CLUSTER_STATISTICS_GROUP,
+			REGISTRATION_STATISTICS_GROUP,
+			SIP_REC_STATISTICS_GROUP,
 			NETWORK_GROUP,
 			ACTIVE_ALARM);
 
