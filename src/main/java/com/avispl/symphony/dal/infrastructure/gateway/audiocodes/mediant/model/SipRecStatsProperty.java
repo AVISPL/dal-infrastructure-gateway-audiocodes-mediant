@@ -18,8 +18,8 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum SipRecStatsProperty implements KpiProperty {
-	SIP_REC_SESSIONS("SipRecSessions", "sipRecSessions"),
-	SIP_REC_RATE("SipRecRate(sps)", "sipRecRate");
+	SIP_REC_SESSIONS("SIPRecSessions", "sipRecSessions"),
+	SIP_REC_RATE("SIPRecRate(sps)", "sipRecRate");
 
 	private final String name;
 	private final String kpiId;

@@ -18,7 +18,7 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum MediaClusterStatsProperty implements KpiProperty {
-	DSP_CLUSTER_UTILIZATION("DspClusterUtilization(%)", "dspClusterUtilization"),
+	DSP_CLUSTER_UTILIZATION("DSPClusterUtilization(%)", "dspClusterUtilization"),
 	MEDIA_CLUSTER_UTILIZATION("MediaClusterUtilization(%)", "mediaClusterUtilization");
 
 	private final String name;

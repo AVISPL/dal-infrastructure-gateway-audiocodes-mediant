@@ -100,6 +100,25 @@ class AudioCodesMediantTest {
 			Assertions.assertTrue(MapUtils.isNotEmpty(groupStats), "Expected non-empty stats for group " + group);
 			groupStats.forEach((pName, pValue) -> Assertions.assertTrue(this.isValidValue(pValue)));
 		}
+
+		//	The assertions above only check that each group is non-empty, so a typo in a property display name
+		//	would go unnoticed. These names carry uppercase acronyms per the Adapter Extended Properties Naming
+		//	Guidelines and are spelled out literally on purpose - reading them from the enum would make the test
+		//	follow any rename instead of catching it.
+		List<String> acronymPropertyKeys = List.of(
+				Constant.MEDIA_CLUSTER_STATISTICS_GROUP + Constant.HASH + "DSPClusterUtilization(%)",
+				Constant.MEDIA_DSP_STATISTICS_GROUP + Constant.HASH + "DSPResourceCurrent(%)",
+				Constant.MEDIA_DSP_STATISTICS_GROUP + Constant.HASH + "SBCSessionsCoderTranscoding",
+				Constant.MEDIA_DSP_STATISTICS_GROUP + Constant.HASH + "SBCSessionsCoderTranscoding(%)",
+				Constant.REGISTRATION_STATISTICS_GROUP + Constant.HASH + "SBCRegistrationSuccessRatio(%)",
+				Constant.SIP_REC_STATISTICS_GROUP + Constant.HASH + "SIPRecSessions",
+				Constant.SIP_REC_STATISTICS_GROUP + Constant.HASH + "SIPRecRate(sps)",
+				Constant.MEDIA_STATISTICS_GROUP + Constant.HASH + "MediaRTPStreams");
+
+		for (String key : acronymPropertyKeys) {
+			Assertions.assertTrue(statistics.getStatistics().containsKey(key),
+					"Expected property " + key + " to be present; check the display name in the corresponding KpiProperty enum");
+		}
 	}
 
 	@Test

@@ -32,7 +32,7 @@ public enum MediaStatsProperty implements KpiProperty {
 	MEDIA_BANDWIDTH_IN("MediaBandwidthIn(Kbps)", "mediaBandwidthIn"),
 	MEDIA_BANDWIDTH_OUT("MediaBandwidthOut(Kbps)", "mediaBandwidthOut"),
 	MEDIA_STREAMS("MediaStreams", "mediaStreams"),
-	MEDIA_RTP_STREAMS("MediaRtpStreams", "mediaRtpStreams");
+	MEDIA_RTP_STREAMS("MediaRTPStreams", "mediaRtpStreams");
 
 	private final String name;
 	private final String kpiId;

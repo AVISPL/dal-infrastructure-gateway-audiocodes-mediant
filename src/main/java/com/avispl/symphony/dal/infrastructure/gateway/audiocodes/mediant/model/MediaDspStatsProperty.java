@@ -12,7 +12,7 @@ import lombok.Getter;
  * DSP resource consumption and transcoding load KPIs (device group {@code media/dspStats/global}),
  * monitored under the {@code MediaDspStatistics} group.
  * <p>
- * {@code SbcSessionsCoderTranscoding} and {@code SbcSessionsCoderTranscoding(%)} are deliberately
+ * {@code SBCSessionsCoderTranscoding} and {@code SBCSessionsCoderTranscoding(%)} are deliberately
  * near-identical names: the device reports transcoding sessions both as an absolute count and as a
  * percentage of capacity.
  *
@@ -22,9 +22,9 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum MediaDspStatsProperty implements KpiProperty {
-	DSP_RESOURCE_CURRENT("DspResourceCurrent(%)", "dspResourceCurrentPercent"),
-	SBC_SESSIONS_CODER_TRANSCODING("SbcSessionsCoderTranscoding", "sbcSessionsCoderTranscoding"),
-	SBC_SESSIONS_CODER_TRANSCODING_PERCENT("SbcSessionsCoderTranscoding(%)", "sbcSessionsCoderTranscodingPercent");
+	DSP_RESOURCE_CURRENT("DSPResourceCurrent(%)", "dspResourceCurrentPercent"),
+	SBC_SESSIONS_CODER_TRANSCODING("SBCSessionsCoderTranscoding", "sbcSessionsCoderTranscoding"),
+	SBC_SESSIONS_CODER_TRANSCODING_PERCENT("SBCSessionsCoderTranscoding(%)", "sbcSessionsCoderTranscodingPercent");
 
 	private final String name;
 	private final String kpiId;
