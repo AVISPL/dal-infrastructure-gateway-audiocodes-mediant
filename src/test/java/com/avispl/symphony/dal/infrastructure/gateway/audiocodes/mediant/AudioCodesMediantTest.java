@@ -81,19 +81,43 @@ class AudioCodesMediantTest {
 	@Test
 	void testGetMultipleStatistics_withCallStatsGroups() throws Exception {
 		var statistics = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
-		List<String> callStatsGroups = List.of(
+		List<String> kpiGroups = List.of(
 				Constant.CALL_LOAD_STATISTICS_GROUP,
 				Constant.CALL_QUALITY_STATISTICS_GROUP,
 				Constant.CALL_TERMINATION_STATISTICS_GROUP,
 				Constant.CALL_MEDIA_ISSUES_STATISTICS_GROUP,
 				Constant.CALL_CAPACITY_STATISTICS_GROUP,
 				Constant.CALL_ROUTING_STATISTICS_GROUP,
-				Constant.CALL_TRAFFIC_STATISTICS_GROUP);
+				Constant.CALL_TRAFFIC_STATISTICS_GROUP,
+				Constant.MEDIA_STATISTICS_GROUP,
+				Constant.MEDIA_DSP_STATISTICS_GROUP,
+				Constant.MEDIA_CLUSTER_STATISTICS_GROUP,
+				Constant.REGISTRATION_STATISTICS_GROUP,
+				Constant.SIP_REC_STATISTICS_GROUP);
 
-		for (String group : callStatsGroups) {
+		for (String group : kpiGroups) {
 			var groupStats = this.filterGroupStatistics(statistics.getStatistics(), group);
 			Assertions.assertTrue(MapUtils.isNotEmpty(groupStats), "Expected non-empty stats for group " + group);
 			groupStats.forEach((pName, pValue) -> Assertions.assertTrue(this.isValidValue(pValue)));
+		}
+
+		//	The assertions above only check that each group is non-empty, so a typo in a property display name
+		//	would go unnoticed. These names carry uppercase acronyms per the Adapter Extended Properties Naming
+		//	Guidelines and are spelled out literally on purpose - reading them from the enum would make the test
+		//	follow any rename instead of catching it.
+		List<String> acronymPropertyKeys = List.of(
+				Constant.MEDIA_CLUSTER_STATISTICS_GROUP + Constant.HASH + "DSPClusterUtilization(%)",
+				Constant.MEDIA_DSP_STATISTICS_GROUP + Constant.HASH + "DSPResourceCurrent(%)",
+				Constant.MEDIA_DSP_STATISTICS_GROUP + Constant.HASH + "SBCSessionsCoderTranscoding",
+				Constant.MEDIA_DSP_STATISTICS_GROUP + Constant.HASH + "SBCSessionsCoderTranscoding(%)",
+				Constant.REGISTRATION_STATISTICS_GROUP + Constant.HASH + "SBCRegistrationSuccessRatio(%)",
+				Constant.SIP_REC_STATISTICS_GROUP + Constant.HASH + "SIPRecSessions",
+				Constant.SIP_REC_STATISTICS_GROUP + Constant.HASH + "SIPRecRate(sps)",
+				Constant.MEDIA_STATISTICS_GROUP + Constant.HASH + "MediaRTPStreams");
+
+		for (String key : acronymPropertyKeys) {
+			Assertions.assertTrue(statistics.getStatistics().containsKey(key),
+					"Expected property " + key + " to be present; check the display name in the corresponding KpiProperty enum");
 		}
 	}
 
@@ -148,6 +172,45 @@ class AudioCodesMediantTest {
 		} finally {
 			noDiagnosticsCommunicator.disconnect();
 			noDiagnosticsCommunicator.destroy();
+		}
+	}
+
+	/**
+	 * Each new KPI group must be selectable on its own. This is the only test that catches a group name
+	 * missing from {@link Constant#SUPPORTED_PROPERTY_GROUPS}: an unsupported name is filtered out of
+	 * {@code displayPropertyGroups}, which leaves the list empty and falls back to
+	 * {@link Constant#CALL_STATS_ALL_GROUPS} - enabling every group. Asserting the selected group is
+	 * present would therefore pass either way, so the load-bearing assertion is that a group which was
+	 * <em>not</em> selected is absent.
+	 */
+	@Test
+	void testGetMultipleStatistics_withSingleGroupEnabled() throws Exception {
+		List<String> newKpiGroups = List.of(
+				Constant.MEDIA_STATISTICS_GROUP,
+				Constant.MEDIA_DSP_STATISTICS_GROUP,
+				Constant.MEDIA_CLUSTER_STATISTICS_GROUP,
+				Constant.REGISTRATION_STATISTICS_GROUP,
+				Constant.SIP_REC_STATISTICS_GROUP);
+
+		for (String group : newKpiGroups) {
+			var singleGroupCommunicator = new AudioCodesMediantCommunicator();
+			singleGroupCommunicator.setHost("localhost");
+			singleGroupCommunicator.setPort(8083);
+			singleGroupCommunicator.setLogin("admin");
+			singleGroupCommunicator.setPassword("admin");
+			singleGroupCommunicator.setDisplayPropertyGroups(group);
+			singleGroupCommunicator.init();
+			try {
+				var statistics = (ExtendedStatistics) singleGroupCommunicator.getMultipleStatistics().get(0);
+				Assertions.assertTrue(MapUtils.isNotEmpty(this.filterGroupStatistics(statistics.getStatistics(), group)),
+						"Expected non-empty stats for group " + group + " when it is the only group enabled");
+				Assertions.assertTrue(MapUtils.isEmpty(this.filterGroupStatistics(statistics.getStatistics(), Constant.CALL_LOAD_STATISTICS_GROUP)),
+						"CallLoadStatistics should be absent when only " + group + " is enabled; if it is present, "
+								+ group + " is likely missing from SUPPORTED_PROPERTY_GROUPS and the 'All' fallback kicked in");
+			} finally {
+				singleGroupCommunicator.disconnect();
+				singleGroupCommunicator.destroy();
+			}
 		}
 	}
 
