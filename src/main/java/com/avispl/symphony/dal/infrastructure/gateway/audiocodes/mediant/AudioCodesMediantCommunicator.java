@@ -46,6 +46,11 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.C
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallRoutingStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallTerminationStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallTrafficStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaClusterStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaDspStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.RegistrationStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.SipRecStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.Alarms;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.AlarmsResponse;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.KpiValue;
@@ -195,7 +200,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			List<AdvancedControllableProperty> controls = new ArrayList<>();
 			retrieveMetadata(stats);
 			retrieveDeviceStatus(stats);
-			retrieveCallStats(stats);
+			retrieveKpiGroups(stats);
 			retrieveCallDiagnostics(stats, controls);
 			if (isGroupEnabled(Constant.ACTIVE_ALARM)) {
 				this.setupData();
@@ -451,28 +456,38 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	}
 
 	/**
-	 * Retrieves each optional call-statistics group whose name is present in {@link #displayPropertyGroups},
-	 * populating {@code stats} with a {@code <GroupName>#<PropertyName>} entry per KPI. Groups not listed
-	 * there are skipped entirely - no request is made for any of their KPIs.
+	 * Retrieves each optional KPI group whose name is present in {@link #displayPropertyGroups}, populating
+	 * {@code stats} with a {@code <GroupName>#<PropertyName>} entry per KPI. Groups not listed there are
+	 * skipped entirely - no request is made for any of their KPIs.
+	 * <p>
+	 * Each group is paired with the device KPI scope backing it. Most scopes map one-to-one onto a display
+	 * group, except {@link Constant#CALL_STATS_KPI_API}, which backs all seven {@code Call*Statistics}
+	 * groups, and {@link Constant#SBC_OTHER_STATS_KPI_API}, which backs
+	 * {@link Constant#REGISTRATION_STATISTICS_GROUP}.
 	 *
 	 * @param stats the map to populate with property display names as keys
 	 * and their corresponding string values as values; must not be {@code null}
 	 * @throws FailedLoginException if a KPI request fails due to authentication issues
 	 */
-	private void retrieveCallStats(Map<String, String> stats) throws FailedLoginException {
-		retrieveKpiGroup(stats, Constant.CALL_LOAD_STATISTICS_GROUP, CallLoadStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_QUALITY_STATISTICS_GROUP, CallQualityStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_TERMINATION_STATISTICS_GROUP, CallTerminationStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_MEDIA_ISSUES_STATISTICS_GROUP, CallMediaIssuesStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_CAPACITY_STATISTICS_GROUP, CallCapacityStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_ROUTING_STATISTICS_GROUP, CallRoutingStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_TRAFFIC_STATISTICS_GROUP, CallTrafficStatsProperty.values());
+	private void retrieveKpiGroups(Map<String, String> stats) throws FailedLoginException {
+		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_LOAD_STATISTICS_GROUP, CallLoadStatsProperty.values());
+		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_QUALITY_STATISTICS_GROUP, CallQualityStatsProperty.values());
+		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_TERMINATION_STATISTICS_GROUP, CallTerminationStatsProperty.values());
+		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_MEDIA_ISSUES_STATISTICS_GROUP, CallMediaIssuesStatsProperty.values());
+		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_CAPACITY_STATISTICS_GROUP, CallCapacityStatsProperty.values());
+		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_ROUTING_STATISTICS_GROUP, CallRoutingStatsProperty.values());
+		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_TRAFFIC_STATISTICS_GROUP, CallTrafficStatsProperty.values());
+		retrieveKpiGroup(stats, Constant.MEDIA_STATS_KPI_API, Constant.MEDIA_STATISTICS_GROUP, MediaStatsProperty.values());
+		retrieveKpiGroup(stats, Constant.MEDIA_DSP_STATS_KPI_API, Constant.MEDIA_DSP_STATISTICS_GROUP, MediaDspStatsProperty.values());
+		retrieveKpiGroup(stats, Constant.MEDIA_CLUSTER_STATS_KPI_API, Constant.MEDIA_CLUSTER_STATISTICS_GROUP, MediaClusterStatsProperty.values());
+		retrieveKpiGroup(stats, Constant.SBC_OTHER_STATS_KPI_API, Constant.REGISTRATION_STATISTICS_GROUP, RegistrationStatsProperty.values());
+		retrieveKpiGroup(stats, Constant.SIP_REC_STATS_KPI_API, Constant.SIP_REC_STATISTICS_GROUP, SipRecStatsProperty.values());
 	}
 
 	/**
-	 * Retrieves every {@code property} belonging to {@code groupName} from the device's SBC call-statistics
-	 * KPI endpoint, populating {@code stats} with a {@code <groupName>#<PropertyName>} entry for each - but
-	 * only if {@code groupName} (or {@link Constant#CALL_STATS_ALL_GROUPS}) is present in
+	 * Retrieves every {@code property} belonging to {@code groupName} from the {@code scopeApi} KPI scope,
+	 * populating {@code stats} with a {@code <groupName>#<PropertyName>} entry for each - but only if
+	 * {@code groupName} (or {@link Constant#CALL_STATS_ALL_GROUPS}) is present in
 	 * {@link #displayPropertyGroups}; otherwise this is a no-op and no request is made.
 	 * <p>
 	 * Each KPI is fetched independently via its own request. A {@code null} response (no content) is
@@ -483,16 +498,18 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 *
 	 * @param <T>        the {@link KpiProperty} enum type for this group
 	 * @param stats      the map to populate with property display names as keys
+	 * @param scopeApi   the device KPI scope backing this group; the {@code kpiId} is appended to it
 	 * @param groupName  the group name gating and prefixing these properties
 	 * @param properties the KPI properties belonging to this group
 	 * @throws FailedLoginException if a KPI request fails due to authentication issues
 	 */
-	private <T extends Enum<T> & KpiProperty> void retrieveKpiGroup(Map<String, String> stats, String groupName, T[] properties) throws FailedLoginException {
+	private <T extends Enum<T> & KpiProperty> void retrieveKpiGroup(Map<String, String> stats, String scopeApi, String groupName, T[] properties)
+			throws FailedLoginException {
 		if (!isGroupEnabled(groupName)) {
 			return;
 		}
 		for (T property : properties) {
-			String uri = Constant.CALL_STATS_KPI_API + Constant.SLASH + property.getKpiId();
+			String uri = scopeApi + Constant.SLASH + property.getKpiId();
 			String value;
 			try {
 				KpiValue kpi = fetchAndConvert(uri, KpiValue.class);
