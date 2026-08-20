@@ -7,9 +7,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
@@ -111,6 +113,20 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	private List<String> displayPropertyGroups = new ArrayList<>(List.of(Constant.CALL_STATS_ALL_GROUPS));
 
 	/**
+	 * Full statistics keys - {@code <GroupName>#<PropertyName>}, exactly as built in
+	 * {@link #retrieveKpiGroup}, unit suffix included (e.g. {@code CallQualityStatistics#AnswerSeizureRatio(%)}) -
+	 * to report as dynamic statistics instead of static ones. Matching is exact; a key that doesn't
+	 * correspond to anything this adapter emits is simply never matched and contributes nothing.
+	 * <p>
+	 * Deliberately unlike {@link #displayPropertyGroups}, this fails closed: an unset, blank or
+	 * entirely unmatched value leaves the set empty, meaning nothing is reported dynamically and
+	 * every property stays in the static statistics map. There is no "select everything" fallback -
+	 * moving a property to dynamic statistics changes how Symphony stores and graphs it, so it only
+	 * ever happens for keys the caller named explicitly.
+	 */
+	private Set<String> historicalProperties = new LinkedHashSet<>();
+
+	/**
 	 * Jackson ObjectMapper for JSON deserialization. Initialized eagerly in the constructor
 	 * to prevent NullPointerException if {@code convertNode} is invoked before {@code internalInit}.
 	 */
@@ -119,6 +135,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 
 	public AudioCodesMediantCommunicator() throws IOException {
 		this.localExtendedStatistics.setStatistics(new HashMap<>());
+		this.localExtendedStatistics.setDynamicStatistics(new HashMap<>());
 		this.localExtendedStatistics.setControllableProperties(new ArrayList<>());
 		adapterProperties.load(getClass().getResourceAsStream("/version.properties"));
 	}
@@ -151,6 +168,39 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		this.displayPropertyGroups = supportedGroups.isEmpty() ? new ArrayList<>(List.of(Constant.CALL_STATS_ALL_GROUPS)) : supportedGroups;
 	}
 
+	public String getHistoricalProperties() {
+		return String.join(",", historicalProperties);
+	}
+
+	/**
+	 * Sets which properties are reported as dynamic (historical) statistics rather than static ones,
+	 * from a comma-separated string of full statistics keys. Each entry must be the complete key as
+	 * emitted by this adapter - group prefix, {@code #} separator and unit suffix included, e.g.
+	 * {@code MediaStatistics#MediaJitterIn(ms)} - and is matched exactly; no normalisation, prefix
+	 * matching or unit-suffix stripping is performed.
+	 * <p>
+	 * Unlike {@link #setDisplayPropertyGroups(String)}, this fails closed: a blank value, or one whose
+	 * every entry matches nothing this adapter emits, results in no dynamic statistics at all rather
+	 * than falling back to selecting everything. Entries are not validated against a list of known
+	 * keys, so a misspelled key is silently inert - it is retained here but never matches, leaving the
+	 * property in the static map.
+	 * <p>
+	 * Note that a listed key is only moved if the property is actually present in a given cycle, so
+	 * naming a property from a group excluded by {@link #displayPropertyGroups} has no effect.
+	 *
+	 * @param historicalProperties comma-separated full statistics keys; blank/empty selects nothing
+	 */
+	public void setHistoricalProperties(String historicalProperties) {
+		if (StringUtils.isNullOrEmpty(historicalProperties, true)) {
+			this.historicalProperties = new LinkedHashSet<>();
+			return;
+		}
+		this.historicalProperties = Arrays.stream(historicalProperties.split(","))
+				.map(String::strip)
+				.filter(key -> !key.isEmpty())
+				.collect(Collectors.toCollection(LinkedHashSet::new));
+	}
+
 	/**
 	 * Whether {@code groupName} should be fetched/displayed this cycle - either it's explicitly
 	 * listed in {@link #displayPropertyGroups}, or {@link Constant#CALL_STATS_ALL_GROUPS} is.
@@ -180,6 +230,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	protected void internalDestroy() {
 		//  Clear the extended properties
 		this.localExtendedStatistics.setStatistics(new HashMap<>());
+		this.localExtendedStatistics.setDynamicStatistics(new HashMap<>());
 		this.localExtendedStatistics.setControllableProperties(new ArrayList<>());
 		//	Clear the populated data
 		this.adapterProperties.clear();
@@ -206,12 +257,53 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 				this.setupData();
 				stats.putAll(Util.generateActiveAlarmsProperties(this.alarmsList));
 			}
+			Map<String, String> dynamicStats = extractHistoricalProperties(stats);
 			this.localExtendedStatistics.setStatistics(stats);
+			this.localExtendedStatistics.setDynamicStatistics(dynamicStats);
 			this.localExtendedStatistics.setControllableProperties(controls);
 		} finally {
 			reentrantLock.unlock();
 		}
 		return List.of(this.localExtendedStatistics, this.localEndpointStatistics);
+	}
+
+	/**
+	 * Moves every property named in {@link #historicalProperties} out of {@code stats} and into a
+	 * freshly allocated map, to be reported as dynamic statistics. A key is matched exactly against
+	 * the statistics key as built in {@link #retrieveKpiGroup} and its siblings, and a property is
+	 * only moved if it is actually present this cycle - a key naming a property that wasn't collected
+	 * (its group is disabled, or the key is misspelled) is skipped entirely.
+	 * <p>
+	 * A selected property is only reported if its value is numeric (see {@link Util#isNumeric(String)}).
+	 * Dynamic statistics are stored and graphed as a time series, so a non-numeric value - most often
+	 * {@link Constant#NOT_AVAILABLE}, emitted whenever a KPI request fails or the device reports an
+	 * empty value - is dropped from <em>both</em> maps for this cycle rather than being recorded as a
+	 * data point or reappearing as a static property. A gap in the series reflects that the device did
+	 * not report a usable value; an {@code "N/A"} stored against a metric would not.
+	 * <p>
+	 * Iteration is over {@link #historicalProperties} rather than {@code stats} because the selection
+	 * is typically a handful of keys against a map of sixty-plus entries. {@code stats} is mutated in
+	 * place: a selected property is removed whether or not it turns out to be reportable, so no
+	 * property is ever reported both statically and dynamically in the same cycle. A new map is
+	 * returned each call rather than one being reused, so a property that stops being collected does
+	 * not linger from a previous cycle.
+	 *
+	 * <p>
+	 * Package-private rather than private so it can be exercised directly, without a device: the
+	 * only public route to it is {@link #getMultipleStatistics()}, which polls first.
+	 *
+	 * @param stats the statistics collected this cycle; entries selected as historical are removed
+	 * @return the properties to report as dynamic statistics; empty if none were selected, matched or numeric
+	 */
+	Map<String, String> extractHistoricalProperties(Map<String, String> stats) {
+		Map<String, String> dynamicStats = new HashMap<>();
+		for (String key : this.historicalProperties) {
+			String value = stats.remove(key);
+			if (Util.isNumeric(value)) {
+				dynamicStats.put(key, value);
+			}
+		}
+		return dynamicStats;
 	}
 
 	@Override
