@@ -154,9 +154,11 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * {@link Constant#CALL_DIAGNOSTICS_GROUP}) to pull from the device and display, from a comma-separated
 	 * string. Groups not listed here are skipped entirely on every poll cycle - no request is made and no
 	 * stats are emitted for them. Passing {@link Constant#CALL_STATS_ALL_GROUPS} (alone or alongside other
-	 * names) enables every group. Any name not in {@link Constant#SUPPORTED_PROPERTY_GROUPS} is silently
-	 * dropped; if that leaves nothing (every supplied name was unsupported), this falls back to
-	 * {@link Constant#CALL_STATS_ALL_GROUPS} rather than displaying nothing.
+	 * names) enables every group. Any name not in {@link Constant#SUPPORTED_PROPERTY_GROUPS} is dropped
+	 * (and logged as a warning); if that leaves nothing (every supplied name was unsupported), this falls
+	 * back to {@link Constant#CALL_STATS_ALL_GROUPS} - which enables every group - rather than displaying
+	 * nothing. That fallback is deliberate but easy to mistake for a working configuration, so it is
+	 * logged separately: a single typo is otherwise indistinguishable from asking for everything.
 	 *
 	 * @param displayPropertyGroups comma-separated group names; blank/empty clears the list (nothing displayed)
 	 */
@@ -165,11 +167,26 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			this.displayPropertyGroups = new ArrayList<>();
 			return;
 		}
-		List<String> supportedGroups = Arrays.stream(displayPropertyGroups.split(","))
+		List<String> requestedGroups = Arrays.stream(displayPropertyGroups.split(","))
 				.map(String::strip)
 				.filter(group -> !group.isEmpty())
+				.collect(Collectors.toList());
+		List<String> supportedGroups = requestedGroups.stream()
 				.filter(Constant.SUPPORTED_PROPERTY_GROUPS::contains)
 				.collect(Collectors.toList());
+
+		List<String> unsupportedGroups = requestedGroups.stream()
+				.filter(group -> !Constant.SUPPORTED_PROPERTY_GROUPS.contains(group))
+				.collect(Collectors.toList());
+		if (!unsupportedGroups.isEmpty()) {
+			this.logger.warn("Ignoring unsupported displayPropertyGroups value(s) [%s]; supported values are [%s] (matching is case-sensitive)".formatted(
+					String.join(Constant.COMMA, unsupportedGroups),
+					Constant.SUPPORTED_PROPERTY_GROUPS.stream().sorted().collect(Collectors.joining(Constant.COMMA))));
+		}
+		if (supportedGroups.isEmpty()) {
+			this.logger.warn("None of the supplied displayPropertyGroups value(s) [%s] is supported; falling back to '%s', which enables every group".formatted(
+					String.join(Constant.COMMA, requestedGroups), Constant.CALL_STATS_ALL_GROUPS));
+		}
 		this.displayPropertyGroups = supportedGroups.isEmpty() ? new ArrayList<>(List.of(Constant.CALL_STATS_ALL_GROUPS)) : supportedGroups;
 	}
 
