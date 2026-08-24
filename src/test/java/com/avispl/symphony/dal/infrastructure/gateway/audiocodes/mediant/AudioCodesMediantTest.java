@@ -217,11 +217,12 @@ class AudioCodesMediantTest {
 
 	/**
 	 * End-to-end check that a property named in {@code historicalProperties} is reported as a dynamic
-	 * statistic and no longer as a static one, against the live device rather than a hand-built map
-	 * (see {@code AudioCodesMediantHistoricalPropertiesTest} for the offline partitioning tests).
+	 * statistic in addition to remaining an extended property, against the live device rather than a
+	 * hand-built map (see {@code AudioCodesMediantHistoricalPropertiesTest} for the offline selection
+	 * tests).
 	 * <p>
 	 * The values are asserted against the device's current data rather than merely checked for
-	 * presence, since the point is to prove the real value survives the move into the dynamic map
+	 * presence, since the point is to prove the real value survives the copy into the dynamic map
 	 * intact. That does couple this test to the simulator's seed values - if it is reseeded, the
 	 * expected numbers here need updating.
 	 * <p>
@@ -257,11 +258,11 @@ class AudioCodesMediantTest {
 			Assertions.assertTrue(Util.isNumeric(answerSeizureRatio) && Util.isNumeric(activeSessions),
 					"Only numeric values are eligible to be reported dynamically");
 
-			//	And are no longer reported statically - a property is never in both maps at once.
-			Assertions.assertFalse(staticStats.containsKey(answerSeizureRatioKey),
-					"A property reported dynamically must be removed from the static statistics");
-			Assertions.assertFalse(staticStats.containsKey(activeSessionsKey),
-					"A property reported dynamically must be removed from the static statistics");
+			//	And remain reported statically too - a selected property appears in both maps.
+			Assertions.assertEquals("95", staticStats.get(answerSeizureRatioKey),
+					"A property reported dynamically must also remain in the static statistics");
+			Assertions.assertEquals("8", staticStats.get(activeSessionsKey),
+					"A property reported dynamically must also remain in the static statistics");
 
 			//	An unlisted property from one of the same groups is untouched.
 			Assertions.assertEquals("97", staticStats.get(networkEffectivenessRatioKey),

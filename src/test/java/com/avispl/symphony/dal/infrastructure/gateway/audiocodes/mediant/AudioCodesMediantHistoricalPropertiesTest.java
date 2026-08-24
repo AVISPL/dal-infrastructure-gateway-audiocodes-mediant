@@ -13,11 +13,11 @@ import org.junit.jupiter.api.Test;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Constant;
 
 /**
- * Tests the {@code historicalProperties} partitioning in
+ * Tests the {@code historicalProperties} selection in
  * {@link AudioCodesMediantCommunicator#extractHistoricalProperties(Map)}.
  * <p>
  * Deliberately separate from {@code AudioCodesMediantTest}: the communicator here is constructed but
- * never initialised, so these tests exercise the partitioning against a hand-built statistics map and
+ * never initialised, so these tests exercise the selection against a hand-built statistics map and
  * need no device or simulator. Keys are spelled out literally, exactly as the adapter emits them -
  * group prefix, {@code #} separator and unit suffix included - since exact matching of that whole
  * string is the behaviour under test.
@@ -37,8 +37,12 @@ class AudioCodesMediantHistoricalPropertiesTest {
 		this.communicator = new AudioCodesMediantCommunicator();
 	}
 
+	/**
+	 * A numeric value is copied into the dynamic map and left in place in the static one - a selected
+	 * property is reported as both an extended property and a dynamic statistic.
+	 */
 	@Test
-	void testExtractHistoricalProperties_movesNumericValueOutOfStatic() {
+	void testExtractHistoricalProperties_copiesNumericValueIntoDynamic() {
 		this.communicator.setHistoricalProperties(RATIO_KEY);
 		Map<String, String> stats = new HashMap<>();
 		stats.put(RATIO_KEY, "97");
@@ -47,25 +51,26 @@ class AudioCodesMediantHistoricalPropertiesTest {
 		var dynamicStats = this.communicator.extractHistoricalProperties(stats);
 
 		Assertions.assertEquals(Map.of(RATIO_KEY, "97"), dynamicStats);
-		Assertions.assertFalse(stats.containsKey(RATIO_KEY), "A property reported dynamically must not also remain in the static map");
-		Assertions.assertEquals(Map.of(SESSIONS_KEY, "12"), stats);
+		Assertions.assertEquals("97", stats.get(RATIO_KEY), "A property reported dynamically must also remain in the static map");
+		Assertions.assertEquals(Map.of(RATIO_KEY, "97", SESSIONS_KEY, "12"), stats);
 	}
 
 	/**
-	 * A fractional value must survive the move - {@code isInt}, the check {@code isNumeric} extends,
+	 * A fractional value must survive the copy - {@code isInt}, the check {@code isNumeric} extends,
 	 * would reject it.
 	 */
 	@Test
-	void testExtractHistoricalProperties_movesDecimalValueOutOfStatic() {
+	void testExtractHistoricalProperties_copiesDecimalValueIntoDynamic() {
 		this.communicator.setHistoricalProperties(RATIO_KEY + "," + JITTER_KEY);
 		Map<String, String> stats = new HashMap<>();
 		stats.put(RATIO_KEY, "99.5");
 		stats.put(JITTER_KEY, "4");
+		Map<String, String> untouched = Map.copyOf(stats);
 
 		var dynamicStats = this.communicator.extractHistoricalProperties(stats);
 
 		Assertions.assertEquals(Map.of(RATIO_KEY, "99.5", JITTER_KEY, "4"), dynamicStats);
-		Assertions.assertTrue(stats.isEmpty());
+		Assertions.assertEquals(untouched, stats, "stats is never modified");
 	}
 
 	@Test
@@ -82,11 +87,12 @@ class AudioCodesMediantHistoricalPropertiesTest {
 	}
 
 	/**
-	 * {@link Constant#NOT_AVAILABLE} is what every failed or empty KPI response collapses to. It is
-	 * dropped from both maps: not recorded as a data point, and not left behind as a static property.
+	 * {@link Constant#NOT_AVAILABLE} is what every failed or empty KPI response collapses to. It is not
+	 * a usable data point, so it is kept out of the dynamic map - but it stays in {@code stats} and is
+	 * still reported as an extended property, so the operator sees that the KPI reported nothing usable.
 	 */
 	@Test
-	void testExtractHistoricalProperties_dropsNotAvailableFromBothMaps() {
+	void testExtractHistoricalProperties_keepsNotAvailableInStaticMap() {
 		this.communicator.setHistoricalProperties(RATIO_KEY);
 		Map<String, String> stats = new HashMap<>();
 		stats.put(RATIO_KEY, Constant.NOT_AVAILABLE);
@@ -95,8 +101,8 @@ class AudioCodesMediantHistoricalPropertiesTest {
 		var dynamicStats = this.communicator.extractHistoricalProperties(stats);
 
 		Assertions.assertTrue(dynamicStats.isEmpty(), "N/A is not a usable data point");
-		Assertions.assertFalse(stats.containsKey(RATIO_KEY), "A selected property is removed whether or not it turns out to be reportable");
-		Assertions.assertEquals(Map.of(SESSIONS_KEY, "12"), stats);
+		Assertions.assertEquals(Map.of(RATIO_KEY, Constant.NOT_AVAILABLE, SESSIONS_KEY, "12"), stats,
+				"A non-numeric value stays in the static map");
 	}
 
 	/**

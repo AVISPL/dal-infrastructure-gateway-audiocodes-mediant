@@ -268,37 +268,40 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	}
 
 	/**
-	 * Moves every property named in {@link #historicalProperties} out of {@code stats} and into a
+	 * Copies every property named in {@link #historicalProperties} that holds a numeric value into a
 	 * freshly allocated map, to be reported as dynamic statistics. A key is matched exactly against
-	 * the statistics key as built in {@link #retrieveKpiGroup} and its siblings, and a property is
-	 * only moved if it is actually present this cycle - a key naming a property that wasn't collected
-	 * (its group is disabled, or the key is misspelled) is skipped entirely.
+	 * the statistics key as built in {@link #retrieveKpiGroup} and its siblings, and a key naming a
+	 * property that wasn't collected this cycle (its group is disabled, or the key is misspelled) is
+	 * skipped entirely.
 	 * <p>
-	 * A selected property is only reported if its value is numeric (see {@link Util#isNumeric(String)}).
+	 * {@code stats} is never modified: a selected property is reported as an extended property in
+	 * every case, carrying either the device's value or {@link Constant#NOT_AVAILABLE} when there is
+	 * none, and is <em>additionally</em> reported as a dynamic statistic whenever that value is
+	 * numeric (see {@link Util#isNumeric(String)}). A selected property is therefore expected to
+	 * appear in both maps in the same cycle - that duplication is intentional, so that an operator
+	 * reading the device panel sees the property whether or not it currently has a graphable value.
+	 * <p>
 	 * Dynamic statistics are stored and graphed as a time series, so a non-numeric value - most often
 	 * {@link Constant#NOT_AVAILABLE}, emitted whenever a KPI request fails or the device reports an
-	 * empty value - is dropped from <em>both</em> maps for this cycle rather than being recorded as a
-	 * data point or reappearing as a static property. A gap in the series reflects that the device did
-	 * not report a usable value; an {@code "N/A"} stored against a metric would not.
+	 * empty value - is not copied across: a gap in the series reflects that the device did not report
+	 * a usable value, while the extended property still shows what it did report.
 	 * <p>
 	 * Iteration is over {@link #historicalProperties} rather than {@code stats} because the selection
-	 * is typically a handful of keys against a map of sixty-plus entries. {@code stats} is mutated in
-	 * place: a selected property is removed whether or not it turns out to be reportable, so no
-	 * property is ever reported both statically and dynamically in the same cycle. A new map is
-	 * returned each call rather than one being reused, so a property that stops being collected does
-	 * not linger from a previous cycle.
+	 * is typically a handful of keys against a map of sixty-plus entries. A new map is returned each
+	 * call rather than one being reused, so a property that stops being collected does not linger
+	 * from a previous cycle.
 	 *
 	 * <p>
 	 * Package-private rather than private so it can be exercised directly, without a device: the
 	 * only public route to it is {@link #getMultipleStatistics()}, which polls first.
 	 *
-	 * @param stats the statistics collected this cycle; entries selected as historical are removed
+	 * @param stats the statistics collected this cycle; left unmodified
 	 * @return the properties to report as dynamic statistics; empty if none were selected, matched or numeric
 	 */
 	Map<String, String> extractHistoricalProperties(Map<String, String> stats) {
 		Map<String, String> dynamicStats = new HashMap<>();
 		for (String key : this.historicalProperties) {
-			String value = stats.remove(key);
+			String value = stats.get(key);
 			if (Util.isNumeric(value)) {
 				dynamicStats.put(key, value);
 			}
@@ -583,10 +586,12 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * {@link #displayPropertyGroups}; otherwise this is a no-op and no request is made.
 	 * <p>
 	 * Each KPI is fetched independently via its own request. A {@code null} response (no content) is
-	 * treated as an authoritative zero. Any failure to fetch or parse a given KPI - a malformed response
-	 * ({@link DataConversionException}) or any other error (e.g. the device not recognizing this particular
-	 * {@code kpiId}) - is logged and reported as {@link Constant#NOT_AVAILABLE} for that single KPI, without
-	 * affecting the rest of the group or aborting the poll cycle.
+	 * reported as {@link Constant#NOT_AVAILABLE}, not as a zero: the device declining to supply a value
+	 * is not the same as it reporting a value of zero, and recording the former as the latter would put a
+	 * fabricated data point into the time series of a KPI selected as a historical property. Any failure
+	 * to fetch or parse a given KPI - a malformed response ({@link DataConversionException}) or any other
+	 * error (e.g. the device not recognizing this particular {@code kpiId}) - is reported the same way,
+	 * and is logged, without affecting the rest of the group or aborting the poll cycle.
 	 *
 	 * @param <T>        the {@link KpiProperty} enum type for this group
 	 * @param stats      the map to populate with property display names as keys
@@ -605,7 +610,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			String value;
 			try {
 				KpiValue kpi = fetchAndConvert(uri, KpiValue.class);
-				value = kpi == null ? "0" : kpi.getValue();
+				value = kpi == null ? null : kpi.getValue();
 			} catch (DataConversionException e) {
 				this.logger.error("Failed to parse the '%s' KPI response from %s".formatted(property.getKpiId(), uri), e);
 				value = null;
