@@ -229,11 +229,16 @@ class AudioCodesMediantTest {
 	 * {@code displayPropertyGroups} is narrowed to the two groups involved so the test issues only the
 	 * KPI requests it actually needs, and so that a property selected as historical is confirmed to
 	 * work alongside a narrowed group selection rather than only under the {@code All} default.
+	 * <p>
+	 * The selection is configured as bare property names, without the group prefix the statistics keys
+	 * themselves carry, since resolving the one to the other is part of what this exercises.
 	 */
 	@Test
 	void testGetMultipleStatistics_withHistoricalProperties() throws Exception {
-		String answerSeizureRatioKey = Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + "AnswerSeizureRatio(%)";
-		String activeSessionsKey = Constant.CALL_LOAD_STATISTICS_GROUP + Constant.HASH + "ActiveSessions";
+		String answerSeizureRatioProperty = "AnswerSeizureRatio(%)";
+		String activeSessionsProperty = "ActiveSessions";
+		String answerSeizureRatioKey = Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + answerSeizureRatioProperty;
+		String activeSessionsKey = Constant.CALL_LOAD_STATISTICS_GROUP + Constant.HASH + activeSessionsProperty;
 		String networkEffectivenessRatioKey = Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + "NetworkEffectivenessRatio(%)";
 
 		var historicalCommunicator = new AudioCodesMediantCommunicator();
@@ -243,7 +248,7 @@ class AudioCodesMediantTest {
 		historicalCommunicator.setPassword("admin");
 		historicalCommunicator.setDisplayPropertyGroups(
 				Constant.CALL_QUALITY_STATISTICS_GROUP + "," + Constant.CALL_LOAD_STATISTICS_GROUP);
-		historicalCommunicator.setHistoricalProperties(answerSeizureRatioKey + "," + activeSessionsKey);
+		historicalCommunicator.setHistoricalProperties(answerSeizureRatioProperty + "," + activeSessionsProperty);
 		historicalCommunicator.init();
 		try {
 			var statistics = (ExtendedStatistics) historicalCommunicator.getMultipleStatistics().get(0);
