@@ -78,10 +78,10 @@ public class Constant {
 	public static final String CALL_ROUTING_STATISTICS_GROUP = "CallRoutingStatistics";
 	public static final String CALL_TRAFFIC_STATISTICS_GROUP = "CallTrafficStatistics";
 	public static final String MEDIA_STATISTICS_GROUP = "MediaStatistics";
-	public static final String MEDIA_DSP_STATISTICS_GROUP = "MediaDspStatistics";
+	public static final String MEDIA_DSP_STATISTICS_GROUP = "MediaDSPStatistics";
 	public static final String MEDIA_CLUSTER_STATISTICS_GROUP = "MediaClusterStatistics";
 	public static final String REGISTRATION_STATISTICS_GROUP = "RegistrationStatistics";
-	public static final String SIP_REC_STATISTICS_GROUP = "SipRecStatistics";
+	public static final String SIP_REC_STATISTICS_GROUP = "SIPRecStatistics";
 	//	Every value displayPropertyGroups is allowed to contain; anything else is unsupported and dropped.
 	public static final Set<String> SUPPORTED_PROPERTY_GROUPS = Set.of(
 			CALL_STATS_ALL_GROUPS,

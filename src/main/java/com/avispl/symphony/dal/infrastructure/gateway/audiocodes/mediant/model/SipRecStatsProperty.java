@@ -10,7 +10,7 @@ import lombok.Getter;
 
 /**
  * SIP-REC (session recording) volume and establishment-rate KPIs (device group
- * {@code sbc/sipRecStats/global}), monitored under the {@code SipRecStatistics} group.
+ * {@code sbc/sipRecStats/global}), monitored under the {@code SIPRecStatistics} group.
  *
  * @author Symphony Dev Team
  * @since 1.0.0
