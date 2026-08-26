@@ -10,7 +10,7 @@ import lombok.Getter;
 
 /**
  * DSP resource consumption and transcoding load KPIs (device group {@code media/dspStats/global}),
- * monitored under the {@code MediaDspStatistics} group.
+ * monitored under the {@code MediaDSPStatistics} group.
  * <p>
  * {@code SBCSessionsCoderTranscoding} and {@code SBCSessionsCoderTranscoding(%)} are deliberately
  * near-identical names: the device reports transcoding sessions both as an absolute count and as a
