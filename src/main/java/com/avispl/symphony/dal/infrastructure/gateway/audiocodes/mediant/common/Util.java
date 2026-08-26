@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.commons.collections.CollectionUtils;
@@ -36,6 +37,9 @@ import com.avispl.symphony.dal.util.StringUtils;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class Util {
 	private static final Logger LOG = Logger.ofClass(Util.class);
+
+	/** An optional sign, digits, and an optional fractional part - the only numeric form a KPI value is expected to take. */
+	private static final Pattern NUMERIC_PATTERN = Pattern.compile("[+-]?\\d+(\\.\\d+)?");
 
 	/**
 	 * check value is null or empty
@@ -120,6 +124,30 @@ public final class Util {
 			return false;
 		}
 	}
+
+	/**
+	 * Whether {@code value} is a plain decimal number, and therefore usable as a numeric data point.
+	 * <p>
+	 * Broader than {@link #isInt(String)}, which accepts only values that fit an {@code int} - that
+	 * rules out both fractional KPI values (ratios, jitter) and cumulative counters large enough to
+	 * exceed {@link Integer#MAX_VALUE}; this accepts either. Deliberately stricter than
+	 * {@link Double#parseDouble(String)} alone, which would also accept the type-suffixed
+	 * ({@code "3f"}, {@code "1.5d"}), hexadecimal ({@code "0x1p3"}) and non-finite ({@code "NaN"},
+	 * {@code "Infinity"}) forms - none meaningful as a metric, and all of which would otherwise be
+	 * stored verbatim as an unusable data point. Surrounding whitespace is not tolerated either, so a
+	 * padded value is rejected rather than recorded with its padding intact. The parse is still
+	 * performed after the pattern matches, to reject a literal long enough to overflow to infinity.
+	 *
+	 * @param value the value to check; {@code null}, empty and blank all return {@code false}
+	 * @return {@code true} if {@code value} is a finite plain decimal number
+	 */
+	public static boolean isNumeric(String value) {
+		if (value == null || !NUMERIC_PATTERN.matcher(value).matches()) {
+			return false;
+		}
+		return Double.isFinite(Double.parseDouble(value));
+	}
+
 	/**
 	 * Generates a map of property names and their corresponding values.
 	 * <p>

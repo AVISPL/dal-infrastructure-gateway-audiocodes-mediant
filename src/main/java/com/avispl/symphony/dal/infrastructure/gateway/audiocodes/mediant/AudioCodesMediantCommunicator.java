@@ -7,9 +7,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
@@ -111,6 +113,25 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	private List<String> displayPropertyGroups = new ArrayList<>(List.of(Constant.CALL_STATS_ALL_GROUPS));
 
 	/**
+	 * Property names - the {@code <PropertyName>} portion of a statistics key, with no group prefix but
+	 * the unit suffix included (e.g. {@code AnswerSeizureRatio(%)}, {@code MediaJitterIn(ms)}) - to
+	 * report as dynamic statistics instead of static ones. A name is matched against the part of each
+	 * statistics key after {@link Constant#HASH}, or against the whole key for the ungrouped General
+	 * and Network properties, so a name two groups shared would be selected in both - no two groups
+	 * currently share one. Matching is otherwise exact - no normalisation, prefix matching or
+	 * unit-suffix stripping - so a full {@code <GroupName>#<PropertyName>} key is not a valid entry,
+	 * and a name that doesn't correspond to anything this adapter emits is simply never matched and
+	 * contributes nothing.
+	 * <p>
+	 * Deliberately unlike {@link #displayPropertyGroups}, this fails closed: an unset, blank or
+	 * entirely unmatched value leaves the set empty, meaning nothing is reported dynamically and
+	 * every property stays in the static statistics map. There is no "select everything" fallback -
+	 * moving a property to dynamic statistics changes how Symphony stores and graphs it, so it only
+	 * ever happens for properties the caller named explicitly.
+	 */
+	private Set<String> historicalProperties = new LinkedHashSet<>();
+
+	/**
 	 * Jackson ObjectMapper for JSON deserialization. Initialized eagerly in the constructor
 	 * to prevent NullPointerException if {@code convertNode} is invoked before {@code internalInit}.
 	 */
@@ -119,6 +140,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 
 	public AudioCodesMediantCommunicator() throws IOException {
 		this.localExtendedStatistics.setStatistics(new HashMap<>());
+		this.localExtendedStatistics.setDynamicStatistics(new HashMap<>());
 		this.localExtendedStatistics.setControllableProperties(new ArrayList<>());
 		adapterProperties.load(getClass().getResourceAsStream("/version.properties"));
 	}
@@ -132,9 +154,11 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * {@link Constant#CALL_DIAGNOSTICS_GROUP}) to pull from the device and display, from a comma-separated
 	 * string. Groups not listed here are skipped entirely on every poll cycle - no request is made and no
 	 * stats are emitted for them. Passing {@link Constant#CALL_STATS_ALL_GROUPS} (alone or alongside other
-	 * names) enables every group. Any name not in {@link Constant#SUPPORTED_PROPERTY_GROUPS} is silently
-	 * dropped; if that leaves nothing (every supplied name was unsupported), this falls back to
-	 * {@link Constant#CALL_STATS_ALL_GROUPS} rather than displaying nothing.
+	 * names) enables every group. Any name not in {@link Constant#SUPPORTED_PROPERTY_GROUPS} is dropped
+	 * (and logged as a warning); if that leaves nothing (every supplied name was unsupported), this falls
+	 * back to {@link Constant#CALL_STATS_ALL_GROUPS} - which enables every group - rather than displaying
+	 * nothing. That fallback is deliberate but easy to mistake for a working configuration, so it is
+	 * logged separately: a single typo is otherwise indistinguishable from asking for everything.
 	 *
 	 * @param displayPropertyGroups comma-separated group names; blank/empty clears the list (nothing displayed)
 	 */
@@ -143,12 +167,65 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			this.displayPropertyGroups = new ArrayList<>();
 			return;
 		}
-		List<String> supportedGroups = Arrays.stream(displayPropertyGroups.split(","))
+		List<String> requestedGroups = Arrays.stream(displayPropertyGroups.split(","))
 				.map(String::strip)
 				.filter(group -> !group.isEmpty())
+				.collect(Collectors.toList());
+		List<String> supportedGroups = requestedGroups.stream()
 				.filter(Constant.SUPPORTED_PROPERTY_GROUPS::contains)
 				.collect(Collectors.toList());
+
+		List<String> unsupportedGroups = requestedGroups.stream()
+				.filter(group -> !Constant.SUPPORTED_PROPERTY_GROUPS.contains(group))
+				.collect(Collectors.toList());
+		if (!unsupportedGroups.isEmpty()) {
+			this.logger.warn("Ignoring unsupported displayPropertyGroups value(s) [%s]; supported values are [%s] (matching is case-sensitive)".formatted(
+					String.join(Constant.COMMA, unsupportedGroups),
+					Constant.SUPPORTED_PROPERTY_GROUPS.stream().sorted().collect(Collectors.joining(Constant.COMMA))));
+		}
+		if (supportedGroups.isEmpty()) {
+			this.logger.warn("None of the supplied displayPropertyGroups value(s) [%s] is supported; falling back to '%s', which enables every group".formatted(
+					String.join(Constant.COMMA, requestedGroups), Constant.CALL_STATS_ALL_GROUPS));
+		}
 		this.displayPropertyGroups = supportedGroups.isEmpty() ? new ArrayList<>(List.of(Constant.CALL_STATS_ALL_GROUPS)) : supportedGroups;
+	}
+
+	public String getHistoricalProperties() {
+		return String.join(",", historicalProperties);
+	}
+
+	/**
+	 * Sets which properties are reported as dynamic (historical) statistics rather than static ones,
+	 * from a comma-separated string of property names. Each entry is the property name on its own - no
+	 * group prefix and no {@code #} separator, but the unit suffix included, e.g.
+	 * {@code AnswerSeizureRatio(%)} - and is matched against the part of each statistics key after
+	 * {@link Constant#HASH}, so {@code AnswerSeizureRatio(%)} selects the
+	 * {@code CallQualityStatistics#AnswerSeizureRatio(%)} statistic. A name two groups shared would be
+	 * selected in both, and the ungrouped General and Network properties, whose keys carry no prefix,
+	 * are matched by their whole key. Matching is otherwise exact - no normalisation, prefix matching
+	 * or unit-suffix stripping is performed - so a full group-prefixed key is not a valid entry and
+	 * matches nothing.
+	 * <p>
+	 * Unlike {@link #setDisplayPropertyGroups(String)}, this fails closed: a blank value, or one whose
+	 * every entry matches nothing this adapter emits, results in no dynamic statistics at all rather
+	 * than falling back to selecting everything. Entries are not validated against a list of known
+	 * property names, so a misspelled name is silently inert - it is retained here but never matches,
+	 * leaving the property in the static map.
+	 * <p>
+	 * Note that a listed name is only moved if the property is actually present in a given cycle, so
+	 * naming a property from a group excluded by {@link #displayPropertyGroups} has no effect.
+	 *
+	 * @param historicalProperties comma-separated property names, without group prefix; blank/empty selects nothing
+	 */
+	public void setHistoricalProperties(String historicalProperties) {
+		if (StringUtils.isNullOrEmpty(historicalProperties, true)) {
+			this.historicalProperties = new LinkedHashSet<>();
+			return;
+		}
+		this.historicalProperties = Arrays.stream(historicalProperties.split(","))
+				.map(String::strip)
+				.filter(name -> !name.isEmpty())
+				.collect(Collectors.toCollection(LinkedHashSet::new));
 	}
 
 	/**
@@ -180,6 +257,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	protected void internalDestroy() {
 		//  Clear the extended properties
 		this.localExtendedStatistics.setStatistics(new HashMap<>());
+		this.localExtendedStatistics.setDynamicStatistics(new HashMap<>());
 		this.localExtendedStatistics.setControllableProperties(new ArrayList<>());
 		//	Clear the populated data
 		this.adapterProperties.clear();
@@ -206,12 +284,73 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 				this.setupData();
 				stats.putAll(Util.generateActiveAlarmsProperties(this.alarmsList));
 			}
+			Map<String, String> dynamicStats = extractHistoricalProperties(stats);
 			this.localExtendedStatistics.setStatistics(stats);
+			this.localExtendedStatistics.setDynamicStatistics(dynamicStats);
 			this.localExtendedStatistics.setControllableProperties(controls);
 		} finally {
 			reentrantLock.unlock();
 		}
 		return List.of(this.localExtendedStatistics, this.localEndpointStatistics);
+	}
+
+	/**
+	 * Copies every collected property whose name is listed in {@link #historicalProperties} and whose
+	 * value is numeric into a freshly allocated map, to be reported as dynamic statistics. The
+	 * selection is by property name alone: what is looked up is the part of each statistics key after
+	 * {@link Constant#HASH}, or the whole key for the ungrouped General and Network properties, and
+	 * each match is keyed in the returned map by its full {@code <GroupName>#<PropertyName>} statistics
+	 * key. A listed name matching nothing collected this cycle - its group is disabled, the name is
+	 * misspelled, or it was given as a full group-prefixed key - simply contributes nothing.
+	 * <p>
+	 * {@code stats} is never modified: a selected property is reported as an extended property in
+	 * every case, carrying either the device's value or {@link Constant#NOT_AVAILABLE} when there is
+	 * none, and is <em>additionally</em> reported as a dynamic statistic whenever that value is
+	 * numeric (see {@link Util#isNumeric(String)}). A selected property is therefore expected to
+	 * appear in both maps in the same cycle - that duplication is intentional, so that an operator
+	 * reading the device panel sees the property whether or not it currently has a graphable value.
+	 * <p>
+	 * Dynamic statistics are stored and graphed as a time series, so a non-numeric value - most often
+	 * {@link Constant#NOT_AVAILABLE}, emitted whenever a KPI request fails or the device reports an
+	 * empty value - is not copied across: a gap in the series reflects that the device did not report
+	 * a usable value, while the extended property still shows what it did report. Such a value is
+	 * logged at warn level with its key and value, since a property deliberately selected for
+	 * graphing that yields no data point is worth spotting in the logs - whether the device is failing
+	 * to report it, or the caller has selected a property that is not a number at all.
+	 * <p>
+	 * Iteration is over {@code stats} rather than {@link #historicalProperties} because a listed name
+	 * is no longer a key that can be looked up directly - it identifies however many keys end in that
+	 * property name. A new map is returned each call rather than one being reused, so a property that
+	 * stops being collected does not linger from a previous cycle.
+	 *
+	 * <p>
+	 * Package-private rather than private so it can be exercised directly, without a device: the
+	 * only public route to it is {@link #getMultipleStatistics()}, which polls first.
+	 *
+	 * @param stats the statistics collected this cycle; left unmodified
+	 * @return the properties to report as dynamic statistics, keyed by their full statistics key;
+	 * empty if none were selected, matched or numeric
+	 */
+	Map<String, String> extractHistoricalProperties(Map<String, String> stats) {
+		Map<String, String> dynamicStats = new HashMap<>();
+		if (this.historicalProperties.isEmpty()) {
+			return dynamicStats;
+		}
+		for (Map.Entry<String, String> statistic : stats.entrySet()) {
+			String key = statistic.getKey();
+			int hashIndex = key.lastIndexOf(Constant.HASH);
+			String propertyName = hashIndex < 0 ? key : key.substring(hashIndex + Constant.HASH.length());
+			if (!this.historicalProperties.contains(propertyName)) {
+				continue;
+			}
+			String value = statistic.getValue();
+			if (Util.isNumeric(value)) {
+				dynamicStats.put(key, value);
+			} else {
+				this.logger.warn("The '%s' property is selected as a historical property but its value '%s' is not numeric; reporting it as an extended property only".formatted(key, value));
+			}
+		}
+		return dynamicStats;
 	}
 
 	@Override
@@ -491,10 +630,12 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * {@link #displayPropertyGroups}; otherwise this is a no-op and no request is made.
 	 * <p>
 	 * Each KPI is fetched independently via its own request. A {@code null} response (no content) is
-	 * treated as an authoritative zero. Any failure to fetch or parse a given KPI - a malformed response
-	 * ({@link DataConversionException}) or any other error (e.g. the device not recognizing this particular
-	 * {@code kpiId}) - is logged and reported as {@link Constant#NOT_AVAILABLE} for that single KPI, without
-	 * affecting the rest of the group or aborting the poll cycle.
+	 * reported as {@link Constant#NOT_AVAILABLE}, not as a zero: the device declining to supply a value
+	 * is not the same as it reporting a value of zero, and recording the former as the latter would put a
+	 * fabricated data point into the time series of a KPI selected as a historical property. Any failure
+	 * to fetch or parse a given KPI - a malformed response ({@link DataConversionException}) or any other
+	 * error (e.g. the device not recognizing this particular {@code kpiId}) - is reported the same way,
+	 * and is logged, without affecting the rest of the group or aborting the poll cycle.
 	 *
 	 * @param <T>        the {@link KpiProperty} enum type for this group
 	 * @param stats      the map to populate with property display names as keys
@@ -513,7 +654,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			String value;
 			try {
 				KpiValue kpi = fetchAndConvert(uri, KpiValue.class);
-				value = kpi == null ? "0" : kpi.getValue();
+				value = kpi == null ? null : kpi.getValue();
 			} catch (DataConversionException e) {
 				this.logger.error("Failed to parse the '%s' KPI response from %s".formatted(property.getKpiId(), uri), e);
 				value = null;

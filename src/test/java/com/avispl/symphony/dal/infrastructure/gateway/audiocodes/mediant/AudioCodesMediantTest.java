@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Constant;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Util;
 
 /**
  * AudioCodesMediantTest class
@@ -211,6 +212,140 @@ class AudioCodesMediantTest {
 				singleGroupCommunicator.disconnect();
 				singleGroupCommunicator.destroy();
 			}
+		}
+	}
+
+	/**
+	 * {@code setDisplayPropertyGroups} parses, filters and stores the supplied names without contacting the
+	 * device, so the tests below deliberately skip both {@code init()} and the shared {@link #communicator}
+	 * fixture and build their own instance instead - they are the only tests in this class that pass with
+	 * nothing listening on localhost:8083. State is asserted through {@code getDisplayPropertyGroups()}
+	 * (which joins the stored list on {@code ","}) rather than through the warnings the setter logs.
+	 */
+	@Test
+	void testSetDisplayPropertyGroups_withSingleValidGroup() throws Exception {
+		var localCommunicator = new AudioCodesMediantCommunicator();
+		localCommunicator.setDisplayPropertyGroups(Constant.CALL_LOAD_STATISTICS_GROUP);
+
+		Assertions.assertEquals(Constant.CALL_LOAD_STATISTICS_GROUP, localCommunicator.getDisplayPropertyGroups());
+	}
+
+	/**
+	 * A supported name alongside an unsupported one must keep the supported name and drop only the
+	 * unsupported one - crucially without tripping the "nothing matched" fallback, which would enable
+	 * every group and mask the bad entry. Surrounding whitespace is stripped, and the caller's ordering
+	 * is preserved.
+	 */
+	@Test
+	void testSetDisplayPropertyGroups_withUnsupportedGroupAlongsideValidOnes() throws Exception {
+		var localCommunicator = new AudioCodesMediantCommunicator();
+		localCommunicator.setDisplayPropertyGroups(
+				Constant.CALL_LOAD_STATISTICS_GROUP + ", Bogus, " + Constant.MEDIA_STATISTICS_GROUP);
+
+		Assertions.assertEquals(Constant.CALL_LOAD_STATISTICS_GROUP + "," + Constant.MEDIA_STATISTICS_GROUP,
+				localCommunicator.getDisplayPropertyGroups(),
+				"Unsupported names should be dropped while supported ones survive, without falling back to "
+						+ Constant.CALL_STATS_ALL_GROUPS);
+	}
+
+	/**
+	 * Matching against {@link Constant#SUPPORTED_PROPERTY_GROUPS} is case-sensitive, so a name that differs
+	 * only in case is unsupported. When that leaves nothing, the setter falls back to
+	 * {@link Constant#CALL_STATS_ALL_GROUPS} - which enables every group. This is deliberate, and this test
+	 * pins it so the behaviour cannot change silently.
+	 */
+	@Test
+	void testSetDisplayPropertyGroups_withAllNamesUnsupportedFallsBackToAll() throws Exception {
+		var localCommunicator = new AudioCodesMediantCommunicator();
+		localCommunicator.setDisplayPropertyGroups("callloadstatistics, MEDIASTATISTICS");
+
+		Assertions.assertEquals(Constant.CALL_STATS_ALL_GROUPS, localCommunicator.getDisplayPropertyGroups(),
+				"Every supplied name was unsupported, so the setter should fall back to " + Constant.CALL_STATS_ALL_GROUPS);
+	}
+
+	/**
+	 * Blank input takes the early return and clears the list outright - it must NOT reach the
+	 * {@link Constant#CALL_STATS_ALL_GROUPS} fallback, since "display nothing" and "display everything"
+	 * are opposite outcomes.
+	 */
+	@Test
+	void testSetDisplayPropertyGroups_withBlankInputClearsTheList() throws Exception {
+		var localCommunicator = new AudioCodesMediantCommunicator();
+
+		localCommunicator.setDisplayPropertyGroups("");
+		Assertions.assertEquals("", localCommunicator.getDisplayPropertyGroups(), "An empty string should clear the list");
+
+		localCommunicator.setDisplayPropertyGroups(Constant.CALL_LOAD_STATISTICS_GROUP);
+		localCommunicator.setDisplayPropertyGroups(null);
+		Assertions.assertEquals("", localCommunicator.getDisplayPropertyGroups(), "Null should clear a previously populated list");
+
+		localCommunicator.setDisplayPropertyGroups(Constant.CALL_LOAD_STATISTICS_GROUP);
+		localCommunicator.setDisplayPropertyGroups("   ");
+		Assertions.assertEquals("", localCommunicator.getDisplayPropertyGroups(), "Whitespace-only input should clear the list");
+	}
+
+	/**
+	 * End-to-end check that a property named in {@code historicalProperties} is reported as a dynamic
+	 * statistic in addition to remaining an extended property, against the live device rather than a
+	 * hand-built map (see {@code AudioCodesMediantHistoricalPropertiesTest} for the offline selection
+	 * tests).
+	 * <p>
+	 * The values are asserted against the device's current data rather than merely checked for
+	 * presence, since the point is to prove the real value survives the copy into the dynamic map
+	 * intact. That does couple this test to the simulator's seed values - if it is reseeded, the
+	 * expected numbers here need updating.
+	 * <p>
+	 * {@code displayPropertyGroups} is narrowed to the two groups involved so the test issues only the
+	 * KPI requests it actually needs, and so that a property selected as historical is confirmed to
+	 * work alongside a narrowed group selection rather than only under the {@code All} default.
+	 * <p>
+	 * The selection is configured as bare property names, without the group prefix the statistics keys
+	 * themselves carry, since resolving the one to the other is part of what this exercises.
+	 */
+	@Test
+	void testGetMultipleStatistics_withHistoricalProperties() throws Exception {
+		String answerSeizureRatioProperty = "AnswerSeizureRatio(%)";
+		String activeSessionsProperty = "ActiveSessions";
+		String answerSeizureRatioKey = Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + answerSeizureRatioProperty;
+		String activeSessionsKey = Constant.CALL_LOAD_STATISTICS_GROUP + Constant.HASH + activeSessionsProperty;
+		String networkEffectivenessRatioKey = Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + "NetworkEffectivenessRatio(%)";
+
+		var historicalCommunicator = new AudioCodesMediantCommunicator();
+		historicalCommunicator.setHost("localhost");
+		historicalCommunicator.setPort(8083);
+		historicalCommunicator.setLogin("admin");
+		historicalCommunicator.setPassword("admin");
+		historicalCommunicator.setDisplayPropertyGroups(
+				Constant.CALL_QUALITY_STATISTICS_GROUP + "," + Constant.CALL_LOAD_STATISTICS_GROUP);
+		historicalCommunicator.setHistoricalProperties(answerSeizureRatioProperty + "," + activeSessionsProperty);
+		historicalCommunicator.init();
+		try {
+			var statistics = (ExtendedStatistics) historicalCommunicator.getMultipleStatistics().get(0);
+			Map<String, String> staticStats = statistics.getStatistics();
+			Map<String, String> dynamicStats = statistics.getDynamicStatistics();
+
+			//	Both selected properties are reported dynamically, carrying the device's actual values.
+			String answerSeizureRatio = dynamicStats.get(answerSeizureRatioKey);
+			String activeSessions = dynamicStats.get(activeSessionsKey);
+			Assertions.assertEquals("95", answerSeizureRatio, "Expected the device's answerSeizureRatio in the dynamic statistics");
+			Assertions.assertEquals("8", activeSessions, "Expected the device's activeSessions in the dynamic statistics");
+			Assertions.assertTrue(Util.isNumeric(answerSeizureRatio) && Util.isNumeric(activeSessions),
+					"Only numeric values are eligible to be reported dynamically");
+
+			//	And remain reported statically too - a selected property appears in both maps.
+			Assertions.assertEquals("95", staticStats.get(answerSeizureRatioKey),
+					"A property reported dynamically must also remain in the static statistics");
+			Assertions.assertEquals("8", staticStats.get(activeSessionsKey),
+					"A property reported dynamically must also remain in the static statistics");
+
+			//	An unlisted property from one of the same groups is untouched.
+			Assertions.assertEquals("97", staticStats.get(networkEffectivenessRatioKey),
+					"An unlisted property must stay in the static statistics");
+			Assertions.assertFalse(dynamicStats.containsKey(networkEffectivenessRatioKey),
+					"An unlisted property must not be reported dynamically");
+		} finally {
+			historicalCommunicator.disconnect();
+			historicalCommunicator.destroy();
 		}
 	}
 
