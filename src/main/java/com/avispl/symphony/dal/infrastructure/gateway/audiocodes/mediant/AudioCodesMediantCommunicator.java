@@ -119,12 +119,13 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * statistics key after {@link Constant#HASH}, or against the whole key for the ungrouped General
 	 * and Network properties, so a name two groups shared would be selected in both - no two groups
 	 * currently share one. Matching is otherwise exact - no normalisation, prefix matching or
-	 * unit-suffix stripping - so a full {@code <GroupName>#<PropertyName>} key is not a valid entry,
-	 * and a name that doesn't correspond to anything this adapter emits is simply never matched and
-	 * contributes nothing.
+	 * unit-suffix stripping - so a full {@code <GroupName>#<PropertyName>} key is not a valid entry.
+	 * Only the names in {@link Constant#SUPPORTED_HISTORICAL_PROPERTIES} can reach this set; anything
+	 * else is dropped by {@link #setHistoricalProperties(String)}, so every entry here corresponds to
+	 * a property this adapter can emit.
 	 * <p>
 	 * Deliberately unlike {@link #displayPropertyGroups}, this fails closed: an unset, blank or
-	 * entirely unmatched value leaves the set empty, meaning nothing is reported dynamically and
+	 * entirely unsupported value leaves the set empty, meaning nothing is reported dynamically and
 	 * every property stays in the static statistics map. There is no "select everything" fallback -
 	 * moving a property to dynamic statistics changes how Symphony stores and graphs it, so it only
 	 * ever happens for properties the caller named explicitly.
@@ -203,28 +204,43 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * {@code CallQualityStatistics#AnswerSeizureRatio(%)} statistic. A name two groups shared would be
 	 * selected in both, and the ungrouped General and Network properties, whose keys carry no prefix,
 	 * are matched by their whole key. Matching is otherwise exact - no normalisation, prefix matching
-	 * or unit-suffix stripping is performed - so a full group-prefixed key is not a valid entry and
-	 * matches nothing.
+	 * or unit-suffix stripping is performed - so a full group-prefixed key is not a valid entry and is
+	 * rejected.
 	 * <p>
-	 * Unlike {@link #setDisplayPropertyGroups(String)}, this fails closed: a blank value, or one whose
-	 * every entry matches nothing this adapter emits, results in no dynamic statistics at all rather
-	 * than falling back to selecting everything. Entries are not validated against a list of known
-	 * property names, so a misspelled name is silently inert - it is retained here but never matches,
-	 * leaving the property in the static map.
+	 * Entries are validated against {@link Constant#SUPPORTED_HISTORICAL_PROPERTIES}: a name not in
+	 * that set is dropped (and logged as a warning) rather than retained as a silently inert entry, so
+	 * a typo shows up in the logs instead of quietly producing no graph. Unlike
+	 * {@link #setDisplayPropertyGroups(String)}, dropping every supplied name does <em>not</em> fall
+	 * back to selecting everything: this fails closed, so a blank value, or one whose every entry is
+	 * unsupported, yields no dynamic statistics at all and leaves every property in the static map.
 	 * <p>
 	 * Note that a listed name is only moved if the property is actually present in a given cycle, so
 	 * naming a property from a group excluded by {@link #displayPropertyGroups} has no effect.
 	 *
-	 * @param historicalProperties comma-separated property names, without group prefix; blank/empty selects nothing
+	 * @param historicalProperties comma-separated property names, without group prefix, each one of
+	 * {@link Constant#SUPPORTED_HISTORICAL_PROPERTIES}; unsupported names are dropped, blank/empty selects nothing
 	 */
 	public void setHistoricalProperties(String historicalProperties) {
 		if (StringUtils.isNullOrEmpty(historicalProperties, true)) {
 			this.historicalProperties = new LinkedHashSet<>();
 			return;
 		}
-		this.historicalProperties = Arrays.stream(historicalProperties.split(","))
+		List<String> requestedProperties = Arrays.stream(historicalProperties.split(","))
 				.map(String::strip)
 				.filter(name -> !name.isEmpty())
+				.collect(Collectors.toList());
+
+		List<String> unsupportedProperties = requestedProperties.stream()
+				.filter(name -> !Constant.SUPPORTED_HISTORICAL_PROPERTIES.contains(name))
+				.collect(Collectors.toList());
+		if (!unsupportedProperties.isEmpty()) {
+			this.logger.warn("Ignoring unsupported historicalProperties value(s) [%s]; supported values are [%s] (matching is case-sensitive)".formatted(
+					String.join(Constant.COMMA, unsupportedProperties),
+					Constant.SUPPORTED_HISTORICAL_PROPERTIES.stream().sorted().collect(Collectors.joining(Constant.COMMA))));
+		}
+
+		this.historicalProperties = requestedProperties.stream()
+				.filter(Constant.SUPPORTED_HISTORICAL_PROPERTIES::contains)
 				.collect(Collectors.toCollection(LinkedHashSet::new));
 	}
 
@@ -300,8 +316,9 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * selection is by property name alone: what is looked up is the part of each statistics key after
 	 * {@link Constant#HASH}, or the whole key for the ungrouped General and Network properties, and
 	 * each match is keyed in the returned map by its full {@code <GroupName>#<PropertyName>} statistics
-	 * key. A listed name matching nothing collected this cycle - its group is disabled, the name is
-	 * misspelled, or it was given as a full group-prefixed key - simply contributes nothing.
+	 * key. A listed name matching nothing collected this cycle - because its group is excluded by
+	 * {@link #displayPropertyGroups} - simply contributes nothing; a misspelled or group-prefixed name
+	 * cannot reach here, having been rejected by {@link #setHistoricalProperties(String)}.
 	 * <p>
 	 * {@code stats} is never modified: a selected property is reported as an extended property in
 	 * every case, carrying either the device's value or {@link Constant#NOT_AVAILABLE} when there is
@@ -316,7 +333,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * a usable value, while the extended property still shows what it did report. Such a value is
 	 * logged at warn level with its key and value, since a property deliberately selected for
 	 * graphing that yields no data point is worth spotting in the logs - whether the device is failing
-	 * to report it, or the caller has selected a property that is not a number at all.
+	 * to report it.
 	 * <p>
 	 * Iteration is over {@code stats} rather than {@link #historicalProperties} because a listed name
 	 * is no longer a key that can be looked up directly - it identifies however many keys end in that

@@ -14,7 +14,9 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.
 
 /**
  * Tests the {@code historicalProperties} selection in
- * {@link AudioCodesMediantCommunicator#extractHistoricalProperties(Map)}.
+ * {@link AudioCodesMediantCommunicator#extractHistoricalProperties(Map)}, and the validation
+ * {@link AudioCodesMediantCommunicator#setHistoricalProperties(String)} applies against
+ * {@link Constant#SUPPORTED_HISTORICAL_PROPERTIES} before a name ever reaches that selection.
  * <p>
  * Deliberately separate from {@code AudioCodesMediantTest}: the communicator here is constructed but
  * never initialised, so these tests exercise the selection against a hand-built statistics map and
@@ -112,7 +114,9 @@ class AudioCodesMediantHistoricalPropertiesTest {
 
 	/**
 	 * A full group-prefixed key is not a valid entry: the configured value is compared to the part of
-	 * the statistics key after the hash, which never carries a group prefix.
+	 * the statistics key after the hash, which never carries a group prefix. Since the whitelist holds
+	 * bare property names, such a key is now rejected by the setter rather than merely failing to match
+	 * later - so the property is not selected either way, but the caller gets a warning about it.
 	 */
 	@Test
 	void testExtractHistoricalProperties_withGroupPrefixedKeyConfigured() {
@@ -123,25 +127,35 @@ class AudioCodesMediantHistoricalPropertiesTest {
 
 		var dynamicStats = this.communicator.extractHistoricalProperties(stats);
 
-		Assertions.assertTrue(dynamicStats.isEmpty(), "A group-prefixed key matches nothing; the property name alone is the config format");
+		Assertions.assertEquals("", this.communicator.getHistoricalProperties(),
+				"A group-prefixed key is not a supported name; the property name alone is the config format");
+		Assertions.assertTrue(dynamicStats.isEmpty());
 		Assertions.assertEquals(untouched, stats);
 	}
 
 	/**
-	 * The General and Network properties are emitted without a group prefix, so their whole key is the
-	 * property name and is matched as such.
+	 * The ungrouped General and Network properties are emitted without a group prefix, and
+	 * {@code extractHistoricalProperties} still matches such a key whole - but no ungrouped property is
+	 * in {@link Constant#SUPPORTED_HISTORICAL_PROPERTIES}, every supported name belonging to a prefixed
+	 * KPI group. Naming one is therefore rejected by the setter and selects nothing, whatever the
+	 * statistics map holds. This pins that consequence of the whitelist: what used to be a usable
+	 * selection is no longer reachable through configuration.
 	 */
 	@Test
-	void testExtractHistoricalProperties_matchesUngroupedProperty() {
+	void testExtractHistoricalProperties_rejectsUngroupedProperty() {
 		String uptimeKey = "SystemUptime(sec)";
 		this.communicator.setHistoricalProperties(uptimeKey);
 		Map<String, String> stats = new HashMap<>();
 		stats.put(uptimeKey, "864000");
 		stats.put(RATIO_KEY, "97");
+		Map<String, String> untouched = Map.copyOf(stats);
 
 		var dynamicStats = this.communicator.extractHistoricalProperties(stats);
 
-		Assertions.assertEquals(Map.of(uptimeKey, "864000"), dynamicStats);
+		Assertions.assertEquals("", this.communicator.getHistoricalProperties(),
+				"No ungrouped property is supported, so the setter should have dropped the name");
+		Assertions.assertTrue(dynamicStats.isEmpty());
+		Assertions.assertEquals(untouched, stats);
 	}
 
 	/**
@@ -165,8 +179,9 @@ class AudioCodesMediantHistoricalPropertiesTest {
 	}
 
 	/**
-	 * A listed name matching no property collected this cycle - its group is disabled, or the name is
-	 * misspelled - is skipped rather than emitted as an empty or {@code N/A} entry.
+	 * A listed name matching no property collected this cycle - its group is excluded by
+	 * {@code displayPropertyGroups} - is skipped rather than emitted as an empty or {@code N/A} entry.
+	 * A misspelled name can no longer get this far; the setter rejects it.
 	 */
 	@Test
 	void testExtractHistoricalProperties_withListedPropertyAbsentThisCycle() {
@@ -226,5 +241,98 @@ class AudioCodesMediantHistoricalPropertiesTest {
 
 		Assertions.assertEquals(Map.of(RATIO_KEY, "97"), firstDynamicStats);
 		Assertions.assertTrue(secondDynamicStats.isEmpty(), "The previous cycle's data point must not carry over");
+	}
+
+	/**
+	 * {@code setHistoricalProperties} parses, filters and stores the supplied names without contacting
+	 * the device, the same way {@code setDisplayPropertyGroups} does. State is asserted through
+	 * {@code getHistoricalProperties()} - which joins the stored set on {@code ","} - rather than
+	 * through the warning the setter logs, matching the convention the group-selection tests in
+	 * {@code AudioCodesMediantTest} follow.
+	 */
+	@Test
+	void testSetHistoricalProperties_withSingleSupportedName() {
+		this.communicator.setHistoricalProperties(RATIO_PROPERTY);
+
+		Assertions.assertEquals(RATIO_PROPERTY, this.communicator.getHistoricalProperties());
+	}
+
+	/**
+	 * A supported name alongside an unsupported one keeps the supported name and drops only the
+	 * unsupported one. Surrounding whitespace is stripped, and the caller's ordering survives - the
+	 * backing set is a {@code LinkedHashSet} precisely so the getter round-trips what was asked for.
+	 */
+	@Test
+	void testSetHistoricalProperties_withUnsupportedNameAlongsideValidOnes() {
+		this.communicator.setHistoricalProperties(RATIO_PROPERTY + ", Bogus, " + JITTER_PROPERTY);
+
+		Assertions.assertEquals(RATIO_PROPERTY + "," + JITTER_PROPERTY, this.communicator.getHistoricalProperties(),
+				"Unsupported names should be dropped while supported ones survive, in the order supplied");
+	}
+
+	/**
+	 * Matching against {@link Constant#SUPPORTED_HISTORICAL_PROPERTIES} is case-sensitive, so a name
+	 * differing only in case is unsupported. Unlike {@code setDisplayPropertyGroups}, dropping every
+	 * supplied name does not fall back to selecting everything - this setter fails closed. That
+	 * difference between the two setters is deliberate, and this test pins it so it cannot change
+	 * silently.
+	 */
+	@Test
+	void testSetHistoricalProperties_withAllNamesUnsupportedSelectsNothing() {
+		this.communicator.setHistoricalProperties("answerseizureratio(%), MEDIAJITTERIN(MS)");
+
+		Assertions.assertEquals("", this.communicator.getHistoricalProperties(),
+				"Every supplied name was unsupported, and there is no 'select everything' fallback");
+	}
+
+	/**
+	 * The unit suffix is part of the name, so omitting it or supplying the wrong one is unsupported.
+	 * This is exactly the typo the whitelist exists to surface: before, either spelling was retained
+	 * and silently matched nothing.
+	 */
+	@Test
+	void testSetHistoricalProperties_withMissingOrWrongUnitSuffix() {
+		this.communicator.setHistoricalProperties("AnswerSeizureRatio");
+		Assertions.assertEquals("", this.communicator.getHistoricalProperties(),
+				"The unit suffix is part of the supported name");
+
+		this.communicator.setHistoricalProperties("MediaJitterIn(s)");
+		Assertions.assertEquals("", this.communicator.getHistoricalProperties(),
+				"A wrong unit suffix does not make a supported name");
+	}
+
+	/**
+	 * Blank input takes the early return and clears the selection outright. The outcome matches that of
+	 * an all-unsupported value - both select nothing - but it stays a distinct early return, since the
+	 * warning is only meaningful when the caller actually named something.
+	 */
+	@Test
+	void testSetHistoricalProperties_withBlankInputClearsTheSelection() {
+		this.communicator.setHistoricalProperties("");
+		Assertions.assertEquals("", this.communicator.getHistoricalProperties(), "An empty string should clear the selection");
+
+		this.communicator.setHistoricalProperties(RATIO_PROPERTY);
+		this.communicator.setHistoricalProperties(null);
+		Assertions.assertEquals("", this.communicator.getHistoricalProperties(), "Null should clear a previously populated selection");
+
+		this.communicator.setHistoricalProperties(RATIO_PROPERTY);
+		this.communicator.setHistoricalProperties("   ");
+		Assertions.assertEquals("", this.communicator.getHistoricalProperties(), "Whitespace-only input should clear the selection");
+	}
+
+	/**
+	 * Every name in {@link Constant#SUPPORTED_HISTORICAL_PROPERTIES} must survive the setter exactly as
+	 * supplied: the whitelist and the parsing have to agree, or a name the adapter advertises as
+	 * supported would be unusable through configuration. This also catches a name accidentally carrying
+	 * whitespace or a stray comma when the set is edited.
+	 */
+	@Test
+	void testSetHistoricalProperties_acceptsEverySupportedName() {
+		for (String supported : Constant.SUPPORTED_HISTORICAL_PROPERTIES) {
+			this.communicator.setHistoricalProperties(supported);
+
+			Assertions.assertEquals(supported, this.communicator.getHistoricalProperties(),
+					"A supported name must survive the setter unchanged: " + supported);
+		}
 	}
 }
