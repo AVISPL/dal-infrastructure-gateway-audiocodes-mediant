@@ -27,6 +27,7 @@ import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.EndpointStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.Statistics;
+import com.avispl.symphony.api.dal.error.CommandFailureException;
 import com.avispl.symphony.api.dal.error.ResourceNotReachableException;
 import com.avispl.symphony.api.dal.monitor.Monitorable;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.Communicator;
@@ -673,6 +674,17 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * <p>
 	 * {@link FailedLoginException} and {@link ResourceNotReachableException} are propagated as-is, matching
 	 * {@link #fetchJsonNode(String)}'s contract.
+	 * <p>
+	 * Any other failure is still wrapped in an {@link IllegalStateException}, but its message now also carries the
+	 * device's HTTP status code and response body whenever the cause is a {@link CommandFailureException} - which is
+	 * what {@code RestCommunicator} raises for every error status other than 401 (routed to {@link FailedLoginException})
+	 * and an unreachable host (routed to {@link ResourceNotReachableException}). Without this, a device-side rejection
+	 * such as a 500 from {@code POST /sipTestCall/dial} reaches Symphony's UI as a bare endpoint name with no indication
+	 * of what the device objected to. The body is truncated so an HTML error page cannot swamp the message.
+	 * <p>
+	 * The request body is logged next to the endpoint at ERROR for the same reason. This is safe only because the
+	 * device's credentials travel in headers built by {@code RestCommunicator} and are never part of a body assembled
+	 * here - keep it that way when adding callers.
 	 *
 	 * @param <T>         the target type
 	 * @param uri         the API endpoint to call
@@ -687,8 +699,19 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		} catch (FailedLoginException | ResourceNotReachableException e) {
 			throw e;
 		} catch (Exception e) {
-			this.logger.error("Exception while posting data. Endpoint: %s".formatted(uri), e);
-			throw new IllegalStateException("Failed to send a request 'POST %s'".formatted(uri), e);
+			this.logger.error("Exception while posting data. Endpoint: %s, request body: %s".formatted(uri, requestBody), e);
+			String deviceResponse = "";
+			if (e instanceof CommandFailureException failure) {
+				//	RestCommunicator packs the device's status code and raw response body into CommandFailureException;
+				//	surface both so the failure is diagnosable without access to the device's own logs.
+				final int maxResponseBodyLength = 512;
+				String responseBody = failure.getResponse() == null ? "" : failure.getResponse().trim();
+				if (responseBody.length() > maxResponseBodyLength) {
+					responseBody = responseBody.substring(0, maxResponseBodyLength) + "... (truncated)";
+				}
+				deviceResponse = ", device responded with status %d and body '%s'".formatted(failure.getStatusCode(), responseBody);
+			}
+			throw new IllegalStateException("Failed to send a request 'POST %s'%s".formatted(uri, deviceResponse), e);
 		}
 	}
 
