@@ -369,12 +369,14 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			String startKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_START;
 			String stopKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_STOP;
 
+			//	Stage the text fields stripped: the dial payload sends these verbatim, so a pasted value with
+			//	surrounding whitespace would otherwise reach the device as-is. Length is checked after stripping.
 			if (calledNumberKey.equals(property)) {
-				this.callDiagnosticCalledNumber = validateMaxLength(String.valueOf(value), Constant.CALL_DIAGNOSTICS_CALLED_NUMBER, Constant.CALL_DIAGNOSTICS_CALLED_NUMBER_MAX_LENGTH);
+				this.callDiagnosticCalledNumber = validateMaxLength(String.valueOf(value).strip(), Constant.CALL_DIAGNOSTICS_CALLED_NUMBER, Constant.CALL_DIAGNOSTICS_CALLED_NUMBER_MAX_LENGTH);
 			} else if (callingNumberKey.equals(property)) {
-				this.callDiagnosticCallingNumber = validateMaxLength(String.valueOf(value), Constant.CALL_DIAGNOSTICS_CALLING_NUMBER, Constant.CALL_DIAGNOSTICS_CALLING_NUMBER_MAX_LENGTH);
+				this.callDiagnosticCallingNumber = validateMaxLength(String.valueOf(value).strip(), Constant.CALL_DIAGNOSTICS_CALLING_NUMBER, Constant.CALL_DIAGNOSTICS_CALLING_NUMBER_MAX_LENGTH);
 			} else if (destinationKey.equals(property)) {
-				this.callDiagnosticDestination = validateMaxLength(String.valueOf(value), Constant.CALL_DIAGNOSTICS_DESTINATION, Constant.CALL_DIAGNOSTICS_DESTINATION_MAX_LENGTH);
+				this.callDiagnosticDestination = validateMaxLength(String.valueOf(value).strip(), Constant.CALL_DIAGNOSTICS_DESTINATION, Constant.CALL_DIAGNOSTICS_DESTINATION_MAX_LENGTH);
 			} else if (startKey.equals(property)) {
 				startCallDiagnostic();
 			} else if (stopKey.equals(property)) {

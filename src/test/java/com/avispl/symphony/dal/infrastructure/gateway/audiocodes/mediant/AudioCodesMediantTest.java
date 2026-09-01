@@ -157,6 +157,70 @@ class AudioCodesMediantTest {
 		Assertions.assertFalse(afterStop.getStatistics().containsKey(stopKey), "Stop should be removed once the call is disconnected");
 	}
 
+	/**
+	 * A staged {@code Destination} is stored stripped: the dial payload forwards these values verbatim,
+	 * so surrounding whitespace on a pasted address would otherwise reach the device as-is.
+	 */
+	@Test
+	void testControlProperty_destinationIsStoredStripped() throws Exception {
+		String stored = this.stageAndReadBack(Constant.CALL_DIAGNOSTICS_DESTINATION, "10.4.219.229 ");
+		Assertions.assertEquals("10.4.219.229", stored, "A trailing space must not reach the stored Destination");
+	}
+
+	@Test
+	void testControlProperty_calledAndCallingNumberAreStoredStripped() throws Exception {
+		String storedCalledNumber = this.stageAndReadBack(Constant.CALL_DIAGNOSTICS_CALLED_NUMBER, "  200");
+		Assertions.assertEquals("200", storedCalledNumber, "Leading whitespace must not reach the stored CalledNumber");
+
+		String storedCallingNumber = this.stageAndReadBack(Constant.CALL_DIAGNOSTICS_CALLING_NUMBER, "100\t");
+		Assertions.assertEquals("100", storedCallingNumber, "Trailing whitespace must not reach the stored CallingNumber");
+	}
+
+	/**
+	 * The length check runs against the stripped value, so a value that only exceeds the cap because of
+	 * its padding is accepted rather than rejected.
+	 */
+	@Test
+	void testControlProperty_valueWithinCapAfterStrippingIsAccepted() throws Exception {
+		int maxLength = Constant.CALL_DIAGNOSTICS_DESTINATION_MAX_LENGTH;
+		String atCap = "x".repeat(maxLength);
+		String padded = " " + atCap + " ";
+		Assertions.assertTrue(padded.length() > maxLength, "The padded value must exceed the cap before stripping");
+
+		String stored = this.stageAndReadBack(Constant.CALL_DIAGNOSTICS_DESTINATION, padded);
+		Assertions.assertEquals(atCap, stored, "A value that fits the cap once stripped must be accepted");
+		Assertions.assertEquals(maxLength, stored.length());
+	}
+
+	@Test
+	void testControlProperty_valueOverCapWithoutPaddingIsRejected() throws Exception {
+		String destinationKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_DESTINATION;
+		String overCap = "x".repeat(Constant.CALL_DIAGNOSTICS_DESTINATION_MAX_LENGTH + 1);
+
+		this.communicator.getMultipleStatistics();
+		var exception = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> this.communicator.controlProperty(new ControllableProperty(destinationKey, overCap, null)),
+				"A value over the cap with nothing to strip must still be rejected");
+		Assertions.assertTrue(exception.getMessage().contains(Constant.CALL_DIAGNOSTICS_DESTINATION),
+				"The rejection message should name the field; got: " + exception.getMessage());
+	}
+
+	@Test
+	void testControlProperty_whitespaceOnlyInputStoresEmptyString() throws Exception {
+		String stored = this.stageAndReadBack(Constant.CALL_DIAGNOSTICS_DESTINATION, "   ");
+		Assertions.assertEquals("", stored, "A whitespace-only Destination must be stored as an empty string");
+	}
+
+	/**
+	 * Stripping is confined to the ends of the value - no format validation was introduced, so internal
+	 * whitespace is forwarded untouched.
+	 */
+	@Test
+	void testControlProperty_internalWhitespaceIsPreserved() throws Exception {
+		String stored = this.stageAndReadBack(Constant.CALL_DIAGNOSTICS_DESTINATION, " 10.4.2 19.229 ");
+		Assertions.assertEquals("10.4.2 19.229", stored, "Only surrounding whitespace may be stripped");
+	}
+
 	@Test
 	void testGetMultipleStatistics_withCallDiagnosticsGroupDisabled() throws Exception {
 		var noDiagnosticsCommunicator = new AudioCodesMediantCommunicator();
@@ -347,6 +411,21 @@ class AudioCodesMediantTest {
 			historicalCommunicator.disconnect();
 			historicalCommunicator.destroy();
 		}
+	}
+
+	/**
+	 * Stages {@code value} against the given {@code CallDiagnostics} property and returns what the
+	 * adapter reports back for it on the next polling cycle - i.e. both the stored value and the one
+	 * Symphony would display.
+	 */
+	private String stageAndReadBack(String propertyName, Object value) throws Exception {
+		String key = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + propertyName;
+		//	localExtendedStatistics has to exist before controlProperty reflects the change into it.
+		this.communicator.getMultipleStatistics();
+		this.communicator.controlProperty(new ControllableProperty(key, value, null));
+
+		var statistics = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
+		return statistics.getStatistics().get(key);
 	}
 
 	private Map<String, String> filterGroupStatistics(Map<String, String> statistics, String groupName) {
