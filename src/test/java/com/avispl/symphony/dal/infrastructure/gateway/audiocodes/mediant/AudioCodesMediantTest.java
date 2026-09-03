@@ -3,6 +3,8 @@
  */
 package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -155,6 +157,70 @@ class AudioCodesMediantTest {
 		var afterStop = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
 		Assertions.assertEquals(Constant.CALL_DIAGNOSTICS_DISCONNECTED, afterStop.getStatistics().get(statusKey));
 		Assertions.assertFalse(afterStop.getStatistics().containsKey(stopKey), "Stop should be removed once the call is disconnected");
+	}
+
+	/**
+	 * A staged {@code Destination} is stored stripped: the dial payload forwards these values verbatim,
+	 * so surrounding whitespace on a pasted address would otherwise reach the device as-is.
+	 */
+	@Test
+	void testControlProperty_destinationIsStoredStripped() throws Exception {
+		String stored = this.stageAndReadBack(Constant.CALL_DIAGNOSTICS_DESTINATION, "10.4.219.229 ");
+		Assertions.assertEquals("10.4.219.229", stored, "A trailing space must not reach the stored Destination");
+	}
+
+	@Test
+	void testControlProperty_calledAndCallingNumberAreStoredStripped() throws Exception {
+		String storedCalledNumber = this.stageAndReadBack(Constant.CALL_DIAGNOSTICS_CALLED_NUMBER, "  200");
+		Assertions.assertEquals("200", storedCalledNumber, "Leading whitespace must not reach the stored CalledNumber");
+
+		String storedCallingNumber = this.stageAndReadBack(Constant.CALL_DIAGNOSTICS_CALLING_NUMBER, "100\t");
+		Assertions.assertEquals("100", storedCallingNumber, "Trailing whitespace must not reach the stored CallingNumber");
+	}
+
+	/**
+	 * The length check runs against the stripped value, so a value that only exceeds the cap because of
+	 * its padding is accepted rather than rejected.
+	 */
+	@Test
+	void testControlProperty_valueWithinCapAfterStrippingIsAccepted() throws Exception {
+		int maxLength = Constant.CALL_DIAGNOSTICS_DESTINATION_MAX_LENGTH;
+		String atCap = "x".repeat(maxLength);
+		String padded = " " + atCap + " ";
+		Assertions.assertTrue(padded.length() > maxLength, "The padded value must exceed the cap before stripping");
+
+		String stored = this.stageAndReadBack(Constant.CALL_DIAGNOSTICS_DESTINATION, padded);
+		Assertions.assertEquals(atCap, stored, "A value that fits the cap once stripped must be accepted");
+		Assertions.assertEquals(maxLength, stored.length());
+	}
+
+	@Test
+	void testControlProperty_valueOverCapWithoutPaddingIsRejected() throws Exception {
+		String destinationKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_DESTINATION;
+		String overCap = "x".repeat(Constant.CALL_DIAGNOSTICS_DESTINATION_MAX_LENGTH + 1);
+
+		this.communicator.getMultipleStatistics();
+		var exception = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> this.communicator.controlProperty(new ControllableProperty(destinationKey, overCap, null)),
+				"A value over the cap with nothing to strip must still be rejected");
+		Assertions.assertTrue(exception.getMessage().contains(Constant.CALL_DIAGNOSTICS_DESTINATION),
+				"The rejection message should name the field; got: " + exception.getMessage());
+	}
+
+	@Test
+	void testControlProperty_whitespaceOnlyInputStoresEmptyString() throws Exception {
+		String stored = this.stageAndReadBack(Constant.CALL_DIAGNOSTICS_DESTINATION, "   ");
+		Assertions.assertEquals("", stored, "A whitespace-only Destination must be stored as an empty string");
+	}
+
+	/**
+	 * Stripping is confined to the ends of the value - no format validation was introduced, so internal
+	 * whitespace is forwarded untouched.
+	 */
+	@Test
+	void testControlProperty_internalWhitespaceIsPreserved() throws Exception {
+		String stored = this.stageAndReadBack(Constant.CALL_DIAGNOSTICS_DESTINATION, " 10.4.2 19.229 ");
+		Assertions.assertEquals("10.4.2 19.229", stored, "Only surrounding whitespace may be stripped");
 	}
 
 	@Test
@@ -347,6 +413,141 @@ class AudioCodesMediantTest {
 			historicalCommunicator.disconnect();
 			historicalCommunicator.destroy();
 		}
+	}
+
+	/**
+	 * The dial guard is exercised against forced adapter state rather than a live call: the simulator's
+	 * test calls end on their own within a poll or two, so a second {@code Start} racing a real session
+	 * would be timing-dependent. {@link Constant#CALL_DIAGNOSTICS_DISCONNECTED} is used for the terminal
+	 * case so these track the adapter's own definition of a finished call rather than restating it.
+	 */
+	@Test
+	void testControlProperty_startOnFreshAdapterIsAllowed() throws Exception {
+		this.stageCallDiagnosticFields();
+		Assertions.assertNull(this.readCallDiagnosticSessionId(), "A fresh adapter must not be holding a session");
+		Assertions.assertFalse(this.readIsCallDiagnosticStoppable(), "Stop must not be offered before the first dial");
+
+		Assertions.assertDoesNotThrow(
+				() -> this.communicator.controlProperty(new ControllableProperty(this.callDiagnosticKey(Constant.CALL_DIAGNOSTICS_START), "1", null)),
+				"Start on a never-dialled adapter must not be refused");
+		Assertions.assertNotNull(this.readCallDiagnosticSessionId(), "Start on a fresh adapter must dial and establish a session");
+	}
+
+	@Test
+	void testControlProperty_startRefusedWhileSessionIsHeldAndCallIsLive() throws Exception {
+		String heldSessionId = "577121441";
+		String liveStatus = "Connected";
+		this.stageCallDiagnosticFields();
+		this.forceCallDiagnosticState(heldSessionId, liveStatus);
+		Assertions.assertTrue(this.readIsCallDiagnosticStoppable(), "A live call must be stoppable - the guard keys off this predicate");
+
+		var exception = Assertions.assertThrows(IllegalStateException.class,
+				() -> this.communicator.controlProperty(new ControllableProperty(this.callDiagnosticKey(Constant.CALL_DIAGNOSTICS_START), "1", null)),
+				"Start must be refused while a tracked call has not finished");
+		Assertions.assertTrue(exception.getMessage().contains(heldSessionId),
+				"The refusal should name the held session id; got: " + exception.getMessage());
+		Assertions.assertTrue(exception.getMessage().contains(liveStatus),
+				"The refusal should name the current status; got: " + exception.getMessage());
+
+		//	Refused rather than dialled, so the held session is still the one being tracked.
+		Assertions.assertEquals(heldSessionId, this.readCallDiagnosticSessionId(), "A refused Start must not replace the held session");
+		Assertions.assertTrue(this.readIsCallDiagnosticStoppable(), "Stop visibility must be unaffected by a refused Start");
+	}
+
+	@Test
+	void testControlProperty_startAllowedWhenDisconnectedButSessionNotYetPurged() throws Exception {
+		String staleSessionId = "577121441";
+		this.stageCallDiagnosticFields();
+		this.forceCallDiagnosticState(staleSessionId, Constant.CALL_DIAGNOSTICS_DISCONNECTED);
+		Assertions.assertFalse(this.readIsCallDiagnosticStoppable(), "A disconnected call must not be stoppable");
+
+		Assertions.assertDoesNotThrow(
+				() -> this.communicator.controlProperty(new ControllableProperty(this.callDiagnosticKey(Constant.CALL_DIAGNOSTICS_START), "1", null)),
+				"A finished call whose session the device has not purged yet must not block a new dial");
+
+		//	It dialled rather than being quietly skipped: the stale session was replaced by a new one.
+		Assertions.assertNotNull(this.readCallDiagnosticSessionId(), "A permitted Start must establish a session");
+		Assertions.assertNotEquals(staleSessionId, this.readCallDiagnosticSessionId(),
+				"A permitted Start must dial and replace the stale session id");
+	}
+
+	/**
+	 * {@code Stop} visibility stays keyed solely on the call status, independently of whether a session is
+	 * still held - the dial guard reads the same predicate but must not alter what it reports.
+	 */
+	@Test
+	void testCallDiagnostics_stopVisibilityIsUnchangedByTheDialGuard() throws Exception {
+		this.communicator.getMultipleStatistics();
+
+		this.forceCallDiagnosticState(null, Constant.CALL_DIAGNOSTICS_NOT_DIALED);
+		Assertions.assertFalse(this.readIsCallDiagnosticStoppable(), "Stop is hidden before the first dial");
+
+		this.forceCallDiagnosticState("577121441", "Connected");
+		Assertions.assertTrue(this.readIsCallDiagnosticStoppable(), "Stop is shown while a call is live");
+
+		this.forceCallDiagnosticState("577121441", Constant.CALL_DIAGNOSTICS_DISCONNECTED);
+		Assertions.assertFalse(this.readIsCallDiagnosticStoppable(), "Stop is hidden once disconnected, whether or not the session is still held");
+
+		this.forceCallDiagnosticState(null, Constant.CALL_DIAGNOSTICS_DISCONNECTED);
+		Assertions.assertFalse(this.readIsCallDiagnosticStoppable(), "Stop is hidden once disconnected and the session has been purged");
+	}
+
+	/**
+	 * Stages {@code value} against the given {@code CallDiagnostics} property and returns what the
+	 * adapter reports back for it on the next polling cycle - i.e. both the stored value and the one
+	 * Symphony would display.
+	 */
+	private String stageAndReadBack(String propertyName, Object value) throws Exception {
+		String key = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + propertyName;
+		//	localExtendedStatistics has to exist before controlProperty reflects the change into it.
+		this.communicator.getMultipleStatistics();
+		this.communicator.controlProperty(new ControllableProperty(key, value, null));
+
+		var statistics = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
+		return statistics.getStatistics().get(key);
+	}
+
+	private String callDiagnosticKey(String propertyName) {
+		return Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + propertyName;
+	}
+
+	/**
+	 * Stages the three values a dial requires, so a subsequent {@code Start} reaches the session guard
+	 * instead of being turned away by the blank-field check ahead of it.
+	 */
+	private void stageCallDiagnosticFields() throws Exception {
+		this.communicator.getMultipleStatistics();
+		this.communicator.controlProperty(new ControllableProperty(this.callDiagnosticKey(Constant.CALL_DIAGNOSTICS_CALLED_NUMBER), "200", null));
+		this.communicator.controlProperty(new ControllableProperty(this.callDiagnosticKey(Constant.CALL_DIAGNOSTICS_CALLING_NUMBER), "100", null));
+		this.communicator.controlProperty(new ControllableProperty(this.callDiagnosticKey(Constant.CALL_DIAGNOSTICS_DESTINATION), "10.4.219.229", null));
+	}
+
+	/**
+	 * Sets the two fields the dial guard reads. Assigned directly rather than reached by dialling, because
+	 * the simulator's test calls are short-lived: driving these states through real calls would make the
+	 * assertions depend on how quickly a call ends. No polling cycle may run after this - a refresh would
+	 * overwrite the forced status with whatever the device currently reports.
+	 */
+	private void forceCallDiagnosticState(String sessionId, String status) throws Exception {
+		Field sessionIdField = AudioCodesMediantCommunicator.class.getDeclaredField("callDiagnosticSessionId");
+		sessionIdField.setAccessible(true);
+		sessionIdField.set(this.communicator, sessionId);
+
+		Field statusField = AudioCodesMediantCommunicator.class.getDeclaredField("callDiagnosticStatus");
+		statusField.setAccessible(true);
+		statusField.set(this.communicator, status);
+	}
+
+	private String readCallDiagnosticSessionId() throws Exception {
+		Field sessionIdField = AudioCodesMediantCommunicator.class.getDeclaredField("callDiagnosticSessionId");
+		sessionIdField.setAccessible(true);
+		return (String) sessionIdField.get(this.communicator);
+	}
+
+	private boolean readIsCallDiagnosticStoppable() throws Exception {
+		Method stoppable = AudioCodesMediantCommunicator.class.getDeclaredMethod("isCallDiagnosticStoppable");
+		stoppable.setAccessible(true);
+		return (boolean) stoppable.invoke(this.communicator);
 	}
 
 	private Map<String, String> filterGroupStatistics(Map<String, String> statistics, String groupName) {
