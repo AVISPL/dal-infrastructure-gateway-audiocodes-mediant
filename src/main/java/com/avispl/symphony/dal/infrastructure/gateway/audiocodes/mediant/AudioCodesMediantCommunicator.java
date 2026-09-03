@@ -27,6 +27,7 @@ import com.avispl.symphony.api.dal.dto.control.ControllableProperty;
 import com.avispl.symphony.api.dal.dto.monitor.EndpointStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.ExtendedStatistics;
 import com.avispl.symphony.api.dal.dto.monitor.Statistics;
+import com.avispl.symphony.api.dal.error.CommandFailureException;
 import com.avispl.symphony.api.dal.error.ResourceNotReachableException;
 import com.avispl.symphony.api.dal.monitor.Monitorable;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.Communicator;
@@ -368,12 +369,14 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			String startKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_START;
 			String stopKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_STOP;
 
+			//	Stage the text fields stripped: the dial payload sends these verbatim, so a pasted value with
+			//	surrounding whitespace would otherwise reach the device as-is. Length is checked after stripping.
 			if (calledNumberKey.equals(property)) {
-				this.callDiagnosticCalledNumber = validateMaxLength(String.valueOf(value), Constant.CALL_DIAGNOSTICS_CALLED_NUMBER, Constant.CALL_DIAGNOSTICS_CALLED_NUMBER_MAX_LENGTH);
+				this.callDiagnosticCalledNumber = validateMaxLength(String.valueOf(value).strip(), Constant.CALL_DIAGNOSTICS_CALLED_NUMBER, Constant.CALL_DIAGNOSTICS_CALLED_NUMBER_MAX_LENGTH);
 			} else if (callingNumberKey.equals(property)) {
-				this.callDiagnosticCallingNumber = validateMaxLength(String.valueOf(value), Constant.CALL_DIAGNOSTICS_CALLING_NUMBER, Constant.CALL_DIAGNOSTICS_CALLING_NUMBER_MAX_LENGTH);
+				this.callDiagnosticCallingNumber = validateMaxLength(String.valueOf(value).strip(), Constant.CALL_DIAGNOSTICS_CALLING_NUMBER, Constant.CALL_DIAGNOSTICS_CALLING_NUMBER_MAX_LENGTH);
 			} else if (destinationKey.equals(property)) {
-				this.callDiagnosticDestination = validateMaxLength(String.valueOf(value), Constant.CALL_DIAGNOSTICS_DESTINATION, Constant.CALL_DIAGNOSTICS_DESTINATION_MAX_LENGTH);
+				this.callDiagnosticDestination = validateMaxLength(String.valueOf(value).strip(), Constant.CALL_DIAGNOSTICS_DESTINATION, Constant.CALL_DIAGNOSTICS_DESTINATION_MAX_LENGTH);
 			} else if (startKey.equals(property)) {
 				startCallDiagnostic();
 			} else if (stopKey.equals(property)) {
@@ -673,6 +676,17 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * <p>
 	 * {@link FailedLoginException} and {@link ResourceNotReachableException} are propagated as-is, matching
 	 * {@link #fetchJsonNode(String)}'s contract.
+	 * <p>
+	 * Any other failure is still wrapped in an {@link IllegalStateException}, but its message now also carries the
+	 * device's HTTP status code and response body whenever the cause is a {@link CommandFailureException} - which is
+	 * what {@code RestCommunicator} raises for every error status other than 401 (routed to {@link FailedLoginException})
+	 * and an unreachable host (routed to {@link ResourceNotReachableException}). Without this, a device-side rejection
+	 * such as a 500 from {@code POST /sipTestCall/dial} reaches Symphony's UI as a bare endpoint name with no indication
+	 * of what the device objected to. The body is truncated so an HTML error page cannot swamp the message.
+	 * <p>
+	 * The request body is logged next to the endpoint at ERROR for the same reason. This is safe only because the
+	 * device's credentials travel in headers built by {@code RestCommunicator} and are never part of a body assembled
+	 * here - keep it that way when adding callers.
 	 *
 	 * @param <T>         the target type
 	 * @param uri         the API endpoint to call
@@ -687,8 +701,19 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		} catch (FailedLoginException | ResourceNotReachableException e) {
 			throw e;
 		} catch (Exception e) {
-			this.logger.error("Exception while posting data. Endpoint: %s".formatted(uri), e);
-			throw new IllegalStateException("Failed to send a request 'POST %s'".formatted(uri), e);
+			this.logger.error("Exception while posting data. Endpoint: %s, request body: %s".formatted(uri, requestBody), e);
+			String deviceResponse = "";
+			if (e instanceof CommandFailureException failure) {
+				//	RestCommunicator packs the device's status code and raw response body into CommandFailureException;
+				//	surface both so the failure is diagnosable without access to the device's own logs.
+				final int maxResponseBodyLength = 512;
+				String responseBody = failure.getResponse() == null ? "" : failure.getResponse().trim();
+				if (responseBody.length() > maxResponseBodyLength) {
+					responseBody = responseBody.substring(0, maxResponseBodyLength) + "... (truncated)";
+				}
+				deviceResponse = ", device responded with status %d and body '%s'".formatted(failure.getStatusCode(), responseBody);
+			}
+			throw new IllegalStateException("Failed to send a request 'POST %s'%s".formatted(uri, deviceResponse), e);
 		}
 	}
 
@@ -857,11 +882,23 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * {@code callingNumber} are always required, and a destination is required via either
 	 * {@code destAddress} or {@code destIpGroup} - this adapter only exposes the former
 	 * ({@code CallDiagnostic#Destination}), so all three staged fields are required here.
+	 * <p>
+	 * Refuses to dial while a session this adapter is still tracking has not finished, reusing
+	 * {@link #isCallDiagnosticStoppable()} - the same predicate that gates the {@code Stop} control - so
+	 * Start is refused exactly when Stop is on offer. Dialling regardless would overwrite
+	 * {@link #callDiagnosticSessionId} and orphan the previous session on the device, which permits only a
+	 * limited number of concurrent test calls. A call that has finished but whose session the device has
+	 * not purged yet ({@code Disconnected} with {@link #callDiagnosticSessionId} still set - see
+	 * {@link #refreshCallDiagnosticStatus()}) is deliberately not blocked: there is nothing left to orphan.
 	 *
 	 * @throws IllegalArgumentException if any of the three staged fields is blank
+	 * @throws IllegalStateException    if a test call this adapter is tracking has not finished yet
 	 * @throws Exception                if the dial request fails, or returns no session id
 	 */
 	private void startCallDiagnostic() throws Exception {
+		if (this.callDiagnosticSessionId != null && isCallDiagnosticStoppable()) {
+			throw new IllegalStateException("A test call is already in progress (session %s, status %s); stop it before starting another".formatted(this.callDiagnosticSessionId, this.callDiagnosticStatus));
+		}
 		if (StringUtils.isNullOrEmpty(this.callDiagnosticCalledNumber, true)
 				|| StringUtils.isNullOrEmpty(this.callDiagnosticCallingNumber, true)
 				|| StringUtils.isNullOrEmpty(this.callDiagnosticDestination, true)) {
