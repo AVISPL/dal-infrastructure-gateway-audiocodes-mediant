@@ -7,6 +7,13 @@ import java.util.Set;
 
 import lombok.experimental.UtilityClass;
 
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallLoadStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallQualityStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallTrafficStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaDspStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.RegistrationStatsProperty;
+
 /**
  * Utility class that defines constant values used across the application.
  *
@@ -100,6 +107,27 @@ public class Constant {
 			SIP_REC_STATISTICS_GROUP,
 			NETWORK_GROUP,
 			ACTIVE_ALARM);
+
+	//	Every value historicalProperties is allowed to contain; anything else is unsupported and dropped.
+	//	Deliberately a subset of what the adapter emits - only the KPIs that make sense as a graphed time
+	//	series - and sourced from the property enums so the names cannot drift from the emitted keys.
+	public static final Set<String> SUPPORTED_HISTORICAL_PROPERTIES = Set.of(
+			CallQualityStatsProperty.ANSWER_SEIZURE_RATIO.getName(),
+			CallQualityStatsProperty.NETWORK_EFFECTIVENESS_RATIO.getName(),
+			CallQualityStatsProperty.FAILED_CALLS_IN_RATIO.getName(),
+			CallQualityStatsProperty.FAILED_CALLS_OUT_RATIO.getName(),
+			CallQualityStatsProperty.POST_DIAL_DELAY.getName(),
+			CallLoadStatsProperty.ACTIVE_SESSIONS.getName(),
+			CallTrafficStatsProperty.ATTEMPTED_CALLS_RATE_IN.getName(),
+			CallTrafficStatsProperty.ATTEMPTED_CALLS_RATE_OUT.getName(),
+			MediaStatsProperty.MEDIA_PACKET_LOSS_IN.getName(),
+			MediaStatsProperty.MEDIA_PACKET_LOSS_OUT.getName(),
+			MediaStatsProperty.MEDIA_JITTER_IN.getName(),
+			MediaStatsProperty.MEDIA_JITTER_OUT.getName(),
+			MediaStatsProperty.MEDIA_BANDWIDTH_IN.getName(),
+			MediaStatsProperty.MEDIA_BANDWIDTH_OUT.getName(),
+			MediaDspStatsProperty.DSP_RESOURCE_CURRENT.getName(),
+			RegistrationStatsProperty.REGISTERED_USERS.getName());
 
 	//	CallDiagnostics group properties
 	public static final String CALL_DIAGNOSTICS_CALLED_NUMBER = "CalledNumber";
