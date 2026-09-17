@@ -55,12 +55,18 @@ Adapter behavior can be tuned via the following Adapter Configuration Parameters
 
 | Property | Description |
 | --- | --- |
-| displayPropertyGroups | Comma-separated list of optional property groups to display. Defaults to All. Possible values: All (default), Network, ActiveAlarms, CallDiagnostics, CallLoadStatistics, CallQualityStatistics, CallTerminationStatistics, CallMediaIssuesStatistics, CallCapacityStatistics, CallRoutingStatistics, CallTrafficStatistics, MediaStatistics, MediaDSPStatistics, MediaClusterStatistics, RegistrationStatistics, SIPRecStatistics. General and Adapter Metadata properties are never gated and are always shown. |
-| historicalProperties | Comma-separated list of properties reported as dynamic statistics, so Symphony stores them as a time series and can graph them. Defaults to none. Give the property name only, without the group prefix. Possible values: AnswerSeizureRatio(%), NetworkEffectivenessRatio(%), FailedCallsInRatio(%), FailedCallsOutRatio(%), PostDialDelay(sec), ActiveSessions, AttemptedCallsRateIn(cps), AttemptedCallsRateOut(cps), MediaPacketLossIn(%), MediaPacketLossOut(%), MediaJitterIn(ms), MediaJitterOut(ms), MediaBandwidthIn(Kbps), MediaBandwidthOut(Kbps), DSPResourceCurrent(%), RegisteredUsers. Example: AnswerSeizureRatio(%),ActiveSessions,MediaJitterIn(ms) |
+| displayPropertyGroups | Comma-separated list of optional property groups to display. Defaults to All. Possible values: All (default), Network, ActiveAlarms, CallDiagnostics, CallLoadStatistics, CallQualityStatistics, CallTerminationStatistics, CallMediaIssuesStatistics, CallCapacityStatistics, CallRoutingStatistics, CallTrafficStatistics, MediaStatistics, MediaDSPStatistics, MediaClusterStatistics, RegistrationStatistics, SIPRecStatistics. General and Adapter Metadata properties are never gated and are always shown. This is a display parameter, not a polling parameter; it does not affect how often the device is polled. |
+| historicalProperties | Comma-separated list of properties reported as dynamic statistics, so Symphony stores them as a time series and can graph them. Defaults to none. Give the property name only, without the group prefix. Possible values: AnswerSeizureRatio(%), NetworkEffectivenessRatio(%), FailedCallsInRatio(%), FailedCallsOutRatio(%), PostDialDelay(sec), ActiveSessions, AttemptedCallsRateIn(cps), AttemptedCallsRateOut(cps), MediaPacketLossIn(%), MediaPacketLossOut(%), MediaJitterIn(ms), MediaJitterOut(ms), MediaBandwidthIn(Kbps), MediaBandwidthOut(Kbps), DSPResourceCurrent(%), RegisteredUsers. Example: AnswerSeizureRatio(%),ActiveSessions,MediaJitterIn(ms). This is a storage and graphing parameter, not a polling parameter; it does not affect how often the device is polled. |
 
 Note: Both parameters are matched case-sensitively. Unrecognised displayPropertyGroups values are ignored and logged as a warning listing the supported values; if every supplied value is unrecognised, the adapter falls back to All and logs a separate warning.
 
-Note: The adapter does not expose a configurable API polling interval. Data is retrieved on Symphony's standard polling cycle for the device.
+### Polling parameters for AudioCodes Mediant
+
+The AudioCodes Mediant adapter has no configurable polling parameters. There is no polling interval, polling rate, polling cycle or refresh interval parameter exposed by this adapter, and none can be set in Symphony. The device is polled on Symphony's standard polling cycle.
+
+displayPropertyGroups and historicalProperties are not polling parameters and must not be described as polling-related or polling-adjacent. displayPropertyGroups selects which property groups are displayed; historicalProperties selects which properties are stored as a time series for graphing. Neither changes how often the adapter polls the device.
+
+If asked which polling parameters can be configured for this adapter, the correct answer is: none. If asked whether the API polling rate or polling interval is adjustable, the correct answer is: no.
 
 ## AudioCodes Mediant - Filtering Device(s)
 
@@ -143,7 +149,7 @@ Note: Connection errors are distinct from login/authentication errors. If creden
 **A Property Is Not Being Graphed**
 - Verify the property name is listed in historicalProperties, without its group prefix, and spelled exactly as documented; matching is case-sensitive
 - Verify the property's group is enabled by displayPropertyGroups; a property is only reported as a dynamic statistic if its group is enabled
-- Non-numeric values are skipped for that polling cycle and logged, which shows as a gap in the graph rather than a substituted value
+- Non-numeric values are skipped for that monitoring cycle and logged, which shows as a gap in the graph rather than a substituted value
 
 **Diagnostic Test Call Fails to Start**
 - Verify Called Number, Calling Number and Destination are all set; the call is rejected if any is empty
