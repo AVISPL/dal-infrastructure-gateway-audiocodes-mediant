@@ -61,6 +61,23 @@ public class Constant {
 	public static final String MEDIA_CLUSTER_STATS_KPI_API = "/kpi/current/media/clusterStats/global";
 	public static final String SBC_OTHER_STATS_KPI_API = "/kpi/current/sbc/otherStats/global";
 	public static final String SIP_REC_STATS_KPI_API = "/kpi/current/sbc/sipRecStats/global";
+	//	Base paths for the device's IP Group KPI entities; the IP Group index is appended (e.g. ".../ipGroup/1")
+	//	to read every KPI of that IP Group. IP_GROUP_CALL_STATS_KPI_API on its own lists the IP Group entities.
+	public static final String IP_GROUP_CALL_STATS_KPI_API = "/kpi/current/sbc/callStats/ipGroup";
+	public static final String IP_GROUP_MEDIA_STATS_KPI_API = "/kpi/current/media/mediaStats/ipGroup";
+	public static final String IP_GROUP_OTHER_STATS_KPI_API = "/kpi/current/sbc/otherStats/ipGroup";
+	public static final String IP_GROUP_SIP_REC_STATS_KPI_API = "/kpi/current/sbc/sipRecStats/ipGroup";
+	public static final String DETAILED_PARAM = "detailed";
+	public static final String AFTER_PARAM = "after";
+	public static final String LIMIT_PARAM = "limit";
+	//	Number of IP Group entities requested per listing page.
+	public static final int IP_GROUP_DISCOVERY_PAGE_SIZE = 100;
+	//	Maximum number of IP Group listing pages requested in one discovery.
+	public static final int IP_GROUP_DISCOVERY_MAX_PAGES = 50;
+	//	Bounds and default of the ipGroupDiscoveryInterval adapter property, in seconds.
+	public static final long IP_GROUP_DISCOVERY_INTERVAL_MIN_SECONDS = 60;
+	public static final long IP_GROUP_DISCOVERY_INTERVAL_MAX_SECONDS = 86_400;
+	public static final long IP_GROUP_DISCOVERY_INTERVAL_DEFAULT_SECONDS = 3_600;
 	public static final String TEST_CALL_DIAL_API = "/sipTestCall/dial";
 	public static final String TEST_CALL_STATUS_API = "/sipTestCall/getStatus";
 	public static final String TEST_CALL_SHOW_API = "/sipTestCall/show";
@@ -89,6 +106,9 @@ public class Constant {
 	public static final String MEDIA_CLUSTER_STATISTICS_GROUP = "MediaClusterStatistics";
 	public static final String REGISTRATION_STATISTICS_GROUP = "RegistrationStatistics";
 	public static final String SIP_REC_STATISTICS_GROUP = "SIPRecStatistics";
+	//	Enables the per-IP-Group statistics, reported as one IPGroup_<index>_<name> group per IP Group.
+	public static final String IP_GROUP_STATISTICS_GROUP = "IPGroupStatistics";
+	public static final String IP_GROUP_PREFIX = "IPGroup";
 	//	Every value displayPropertyGroups is allowed to contain; anything else is unsupported and dropped.
 	public static final Set<String> SUPPORTED_PROPERTY_GROUPS = Set.of(
 			CALL_STATS_ALL_GROUPS,
@@ -105,6 +125,7 @@ public class Constant {
 			MEDIA_CLUSTER_STATISTICS_GROUP,
 			REGISTRATION_STATISTICS_GROUP,
 			SIP_REC_STATISTICS_GROUP,
+			IP_GROUP_STATISTICS_GROUP,
 			NETWORK_GROUP,
 			ACTIVE_ALARM);
 
