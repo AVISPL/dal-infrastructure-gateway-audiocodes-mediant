@@ -55,18 +55,34 @@ Adapter behavior can be tuned via the following Adapter Configuration Parameters
 
 | Property | Description |
 | --- | --- |
-| displayPropertyGroups | Comma-separated list of optional property groups to display. Defaults to All. Possible values: All (default), Network, ActiveAlarms, CallDiagnostics, CallLoadStatistics, CallQualityStatistics, CallTerminationStatistics, CallMediaIssuesStatistics, CallCapacityStatistics, CallRoutingStatistics, CallTrafficStatistics, MediaStatistics, MediaDSPStatistics, MediaClusterStatistics, RegistrationStatistics, SIPRecStatistics. General and Adapter Metadata properties are never gated and are always shown. This is a display parameter, not a polling parameter; it does not affect how often the device is polled. |
-| historicalProperties | Comma-separated list of properties reported as dynamic statistics, so Symphony stores them as a time series and can graph them. Defaults to none. Give the property name only, without the group prefix. Possible values: AnswerSeizureRatio(%), NetworkEffectivenessRatio(%), FailedCallsInRatio(%), FailedCallsOutRatio(%), PostDialDelay(sec), ActiveSessions, AttemptedCallsRateIn(cps), AttemptedCallsRateOut(cps), MediaPacketLossIn(%), MediaPacketLossOut(%), MediaJitterIn(ms), MediaJitterOut(ms), MediaBandwidthIn(Kbps), MediaBandwidthOut(Kbps), DSPResourceCurrent(%), RegisteredUsers. Example: AnswerSeizureRatio(%),ActiveSessions,MediaJitterIn(ms). This is a storage and graphing parameter, not a polling parameter; it does not affect how often the device is polled. |
+| displayPropertyGroups | Comma-separated list of optional property groups to display. Defaults to All. Possible values: All (default), Network, ActiveAlarms, CallDiagnostics, CallLoadStatistics, CallQualityStatistics, CallTerminationStatistics, CallMediaIssuesStatistics, CallCapacityStatistics, CallRoutingStatistics, CallTrafficStatistics, MediaStatistics, MediaDSPStatistics, MediaClusterStatistics, RegistrationStatistics, SIPRecStatistics. General and Adapter Metadata properties are never gated and are always shown. A group that is not enabled is not requested from the device at all. How often an enabled group is requested is set by the request interval properties below. |
+| historicalProperties | Comma-separated list of properties reported as dynamic statistics, so Symphony stores them as a time series and can graph them. Defaults to none. Give the property name only, without the group prefix. Possible values: AnswerSeizureRatio(%), NetworkEffectivenessRatio(%), FailedCallsInRatio(%), FailedCallsOutRatio(%), PostDialDelay(sec), ActiveSessions, AttemptedCallsRateIn(cps), AttemptedCallsRateOut(cps), MediaPacketLossIn(%), MediaPacketLossOut(%), MediaJitterIn(ms), MediaJitterOut(ms), MediaBandwidthIn(Kbps), MediaBandwidthOut(Kbps), DSPResourceCurrent(%), RegisteredUsers. Example: AnswerSeizureRatio(%),ActiveSessions,MediaJitterIn(ms). This is a storage and graphing parameter; how often a property's group is requested is set by the request interval properties below. |
+| `<group>RequestInterval` (13 properties, one per cacheable property group: activeAlarmsRequestInterval, callLoadStatisticsRequestInterval, callQualityStatisticsRequestInterval, callTerminationStatisticsRequestInterval, callMediaIssuesStatisticsRequestInterval, callCapacityStatisticsRequestInterval, callRoutingStatisticsRequestInterval, callTrafficStatisticsRequestInterval, mediaStatisticsRequestInterval, mediaDspStatisticsRequestInterval, mediaClusterStatisticsRequestInterval, registrationStatisticsRequestInterval, sipRecStatisticsRequestInterval) | Sets, in seconds, how long the adapter reuses a property group's data before requesting that group from the device again, to reduce the number of requests sent to the device. The property name is the group name in lower camel case followed by RequestInterval, for example mediaStatisticsRequestInterval. Applies only to groups enabled in displayPropertyGroups. Default: not set, meaning the group is requested at every monitoring cycle. Valid values: a whole number from 60 to 86400 (24 hours). A non-numeric or out-of-range value uses 60 and logs a warning; a blank value clears the interval. |
 
-Note: Both parameters are matched case-sensitively. Unrecognised displayPropertyGroups values are ignored and logged as a warning listing the supported values; if every supplied value is unrecognised, the adapter falls back to All and logs a separate warning.
+Note: displayPropertyGroups and historicalProperties are matched case-sensitively. Unrecognised displayPropertyGroups values are ignored and logged as a warning listing the supported values; if every supplied value is unrecognised, the adapter falls back to All and logs a separate warning.
 
 ### Polling parameters for AudioCodes Mediant
+Answer guidance: for any question about the AudioCodes Mediant polling rate, polling interval or monitoring cycle, state every point in this section. Never select or omit points.
+- How often each property group is requested from the device is configurable through the 13 request interval properties (see 'Request interval behavior for AudioCodes Mediant' below), from 60 seconds to 24 hours per group.
+- The adapter is called once per Symphony monitoring cycle (minimum 1 minute); the monitoring cycle itself is a Symphony setting, not an adapter configuration property. General, Network, Adapter Metadata and Call Diagnostics are refreshed at every monitoring cycle.
+- displayPropertyGroups and historicalProperties are not polling parameters. displayPropertyGroups selects which property groups are displayed; historicalProperties selects which properties are stored as a time series for graphing.
 
-The AudioCodes Mediant adapter has no configurable polling parameters. There is no polling interval, polling rate, polling cycle or refresh interval parameter exposed by this adapter, and none can be set in Symphony. The device is polled on Symphony's standard polling cycle.
-
-displayPropertyGroups and historicalProperties are not polling parameters and must not be described as polling-related or polling-adjacent. displayPropertyGroups selects which property groups are displayed; historicalProperties selects which properties are stored as a time series for graphing. Neither changes how often the adapter polls the device.
-
-If asked which polling parameters can be configured for this adapter, the correct answer is: none. If asked whether the API polling rate or polling interval is adjustable, the correct answer is: no.
+### Request interval behavior for AudioCodes Mediant
+Answer guidance: for any question about request intervals, how often a property group is requested, or reducing the number of requests sent to the device, state every point in this section and list every property. Never select or omit points.
+- A `<group>RequestInterval` property sets, in seconds, how long the adapter reuses a property group's data before requesting that group from the device again. The 13 request interval properties are: activeAlarmsRequestInterval, callLoadStatisticsRequestInterval, callQualityStatisticsRequestInterval, callTerminationStatisticsRequestInterval, callMediaIssuesStatisticsRequestInterval, callCapacityStatisticsRequestInterval, callRoutingStatisticsRequestInterval, callTrafficStatisticsRequestInterval, mediaStatisticsRequestInterval, mediaDspStatisticsRequestInterval, mediaClusterStatisticsRequestInterval, registrationStatisticsRequestInterval, sipRecStatisticsRequestInterval.
+- The value is in seconds. The valid range is 60-86400 (24 hours). A non-numeric, below-minimum or above-maximum value uses 60 and logs a warning (an above-maximum value is not limited to 86400). A blank value clears the interval.
+- A group with no request interval set is requested at every monitoring cycle, as in earlier versions of the adapter.
+- An interval applies only to groups enabled in displayPropertyGroups. An interval set for a group that is not enabled is ignored, and a warning is logged, since that group is not requested.
+- Inside the interval, the group's properties show the values from its last request. Historical properties in that group keep being reported from those values each monitoring cycle, so the graph shows the same value until the group is requested again.
+- A group whose interval has passed to within 5 seconds is requested, so a monitoring cycle that arrives slightly early does not skip it.
+- If any request of a group fails, the group is requested again at the next monitoring cycle, whatever its interval.
+- A group with a request interval set also shows `<Group>#DataRetrievedTime`: the time of the group's last request to the device, in UTC, formatted as yyyy-MM-ddTHH:mm:ssZ (24-hour clock), for example 2026-11-06T15:04:05Z. Groups without a request interval do not show it.
+- General, Network, Adapter Metadata and Call Diagnostics have no request interval property and are refreshed at every monitoring cycle:
+  - General and Adapter Metadata are always refreshed.
+  - Network is read from the same device status response as General, so an interval would not reduce the number of requests.
+  - Call Diagnostics tracks a live test call and is driven by controls; caching it would show a stale call status.
+- With an interval set on ActiveAlarms, a newly raised or cleared alarm can take up to that interval to appear.
+- After a control runs on a property group with a request interval set, that group is requested again at the next monitoring cycle so it shows the result of the control. Call Diagnostics, currently the only group with controls, is not cached.
 
 ## AudioCodes Mediant - Filtering Device(s)
 
@@ -115,6 +131,7 @@ The AudioCodes Mediant adapter exposes properties across the following groups. C
 - Ratio, average and quality properties are only calculated by the device once calls have passed through it. On an idle device these correctly report N/A, while the plain counters alongside them report 0.
 - Property availability varies by Mediant model; branches the device does not support are skipped and reported as N/A.
 - Cluster utilisation properties are not meaningful on a non-clustered SBC.
+- A property group with a request interval set also shows DataRetrievedTime, the time (UTC) of the group's last request to the device. See 'Request interval behavior for AudioCodes Mediant'.
 
 ## Troubleshooting checks for AudioCodes Mediant
 
@@ -150,6 +167,12 @@ Note: Connection errors are distinct from login/authentication errors. If creden
 - Verify the property name is listed in historicalProperties, without its group prefix, and spelled exactly as documented; matching is case-sensitive
 - Verify the property's group is enabled by displayPropertyGroups; a property is only reported as a dynamic statistic if its group is enabled
 - Non-numeric values are skipped for that monitoring cycle and logged, which shows as a gap in the graph rather than a substituted value
+- If the property's group has a request interval set, the graph shows the same value until the group is requested again; this is expected
+
+**A Property Value Is Not Updating Every Monitoring Cycle**
+- Check whether the property's group has a request interval set (`<group>RequestInterval`); inside the interval the group shows the values from its last request
+- Compare the group's DataRetrievedTime with the current time (UTC) to see when the group was last requested
+- Clear the request interval (blank value) to request the group at every monitoring cycle
 
 **Diagnostic Test Call Fails to Start**
 - Verify Called Number, Calling Number and Destination are all set; the call is rejected if any is empty

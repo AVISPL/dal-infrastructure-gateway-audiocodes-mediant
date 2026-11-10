@@ -129,6 +129,19 @@ public class Constant {
 			MediaDspStatsProperty.DSP_RESOURCE_CURRENT.getName(),
 			RegistrationStatsProperty.REGISTERED_USERS.getName());
 
+	//	Per-group request interval, in seconds: how long a property group's data is reused before the group is requested
+	//	again. Only the groups with a setter in GroupIntervalCommunicator accept one.
+	public static final long DEFAULT_REQUEST_INTERVAL_SECONDS = 60L;
+	public static final long MIN_REQUEST_INTERVAL_SECONDS = 60L;
+	public static final long MAX_REQUEST_INTERVAL_SECONDS = 86400L;
+	//	A group whose interval has passed to within this many milliseconds is requested anyway. getMultipleStatistics is
+	//	called by Symphony on a schedule that can arrive slightly early (e.g. 59.9 seconds after the last cycle), and
+	//	without this margin such a cycle would skip the group, doubling its effective interval.
+	public static final long REQUEST_INTERVAL_TOLERANCE_MS = 5000L;
+	//	Per-group property holding the time a group was last requested from the device, and the format of its value (UTC).
+	public static final String DATA_RETRIEVED_TIME = "DataRetrievedTime";
+	public static final String DATA_RETRIEVED_TIME_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'";
+
 	//	CallDiagnostics group properties
 	public static final String CALL_DIAGNOSTICS_CALLED_NUMBER = "CalledNumber";
 	public static final String CALL_DIAGNOSTICS_CALLING_NUMBER = "CallingNumber";
