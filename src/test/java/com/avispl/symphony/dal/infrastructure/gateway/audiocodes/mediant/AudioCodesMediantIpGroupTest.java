@@ -3,6 +3,10 @@
  */
 package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -95,6 +99,38 @@ class AudioCodesMediantIpGroupTest {
 		Assertions.assertTrue(dynamicStats.containsKey(Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + "AnswerSeizureRatio(%)"));
 		Assertions.assertTrue(dynamicStats.keySet().stream().noneMatch(key -> key.startsWith(Constant.IP_GROUP_PREFIX + Constant.UNDERSCORE)));
 		Assertions.assertEquals("94", statistics.getStatistics().get("IPGroup_3_Teams#AnswerSeizureRatio(%)"));
+	}
+
+	@Test
+	void testGetMultipleStatistics_ipGroupStatisticsServedFromCacheWithinRequestInterval() throws Exception {
+		this.communicator.setIpGroupStatisticsRequestInterval("3600");
+		String retrievedTimeKey = Constant.IP_GROUP_STATISTICS_GROUP + Constant.HASH + Constant.DATA_RETRIEVED_TIME;
+
+		Map<String, String> firstPoll = this.pollStatistics();
+		Assertions.assertEquals("42", firstPoll.get("IPGroup_1_PSTN1#ActiveCallsIn"));
+		Assertions.assertTrue(firstPoll.containsKey(retrievedTimeKey));
+		try {
+			this.sendToSimulator("PUT", "/ipGroups/1", "{\"kpis\":{\"sbc/callStats\":{\"activeCallsIn\":7}}}");
+			Map<String, String> secondPoll = this.pollStatistics();
+
+			Assertions.assertEquals(SIMULATOR_IP_GROUPS, this.ipGroupNames(secondPoll));
+			Assertions.assertEquals("42", secondPoll.get("IPGroup_1_PSTN1#ActiveCallsIn"));
+			Assertions.assertEquals(firstPoll.get(retrievedTimeKey), secondPoll.get(retrievedTimeKey));
+		} finally {
+			this.sendToSimulator("POST", "/reset", "{}");
+		}
+	}
+
+	/**
+	 * Sends a request to the simulator's control API ({@code /api/simulator}).
+	 */
+	private void sendToSimulator(String method, String path, String body) throws Exception {
+		HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:8083/api/simulator" + path))
+				.header("Content-Type", "application/json")
+				.method(method, HttpRequest.BodyPublishers.ofString(body))
+				.build();
+		HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+		Assertions.assertEquals(200, response.statusCode(), "Simulator control request failed: " + response.body());
 	}
 
 	private Set<String> ipGroupNames(Map<String, String> stats) {
