@@ -4,6 +4,9 @@
 package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -13,7 +16,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -31,7 +36,7 @@ import com.avispl.symphony.api.dal.dto.monitor.Statistics;
 import com.avispl.symphony.api.dal.error.CommandFailureException;
 import com.avispl.symphony.api.dal.error.ResourceNotReachableException;
 import com.avispl.symphony.api.dal.monitor.Monitorable;
-import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.Communicator;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.GroupIntervalCommunicator;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.KpiProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Constant;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.DataConversionException;
@@ -72,7 +77,40 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.d
  * @author Kevin / Symphony Dev Team
  * @since 1.0.0
  */
-public class AudioCodesMediantCommunicator extends Communicator implements Monitorable, Controller {
+public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator implements Monitorable, Controller {
+	/** Formatter of the {@code <Group>#DataRetrievedTime} property; always UTC, to match the {@code Z} suffix. */
+	private static final DateTimeFormatter DATA_RETRIEVED_TIME_FORMATTER = DateTimeFormatter.ofPattern(Constant.DATA_RETRIEVED_TIME_FORMAT).withZone(ZoneOffset.UTC);
+
+	/**
+	 * Requests one cacheable property group into the given map.
+	 */
+	@FunctionalInterface
+	private interface GroupFetcher {
+		/**
+		 * @param groupStats the map to populate with the group's statistics
+		 * @return {@code true} if every request of the group succeeded; {@code false} makes the group be requested
+		 * again at the next cycle, whatever its interval
+		 * @throws Exception if a request fails in a way that aborts the cycle (e.g. bad credentials)
+		 */
+		boolean fetch(Map<String, String> groupStats) throws Exception;
+	}
+
+	/**
+	 * The statistics a cacheable property group produced when it was last requested, the time of that request (epoch
+	 * millis), and whether every request of the group succeeded.
+	 */
+	private record GroupResult(Map<String, String> stats, long fetchedAt, boolean complete) {
+	}
+
+	/**
+	 * Last result of each property group that has a request interval set, by group name. Groups without an interval are
+	 * requested every cycle and never stored here. Read and written under {@link #reentrantLock}.
+	 */
+	private final Map<String, GroupResult> groupResults = new ConcurrentHashMap<>();
+
+	/** Source of the current time (epoch millis) used to decide whether a group's request interval has passed. */
+	private volatile LongSupplier clock = System::currentTimeMillis;
+
 	private final ExtendedStatistics localExtendedStatistics = new ExtendedStatistics();
 	private final EndpointStatistics localEndpointStatistics = new EndpointStatistics();
 	private final ReentrantLock reentrantLock = new ReentrantLock();
@@ -273,6 +311,39 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		this.objectMapper = new ObjectMapper();
 		this.setTrustAllCertificates(true);
 		super.internalInit();
+		warnIntervalsOfDisabledGroups();
+	}
+
+	/**
+	 * Logs a warning for every property group that has a request interval set but is not enabled by
+	 * {@link #displayPropertyGroups}; such an interval has no effect because the group is not requested.
+	 */
+	private void warnIntervalsOfDisabledGroups() {
+		for (String group : getIntervalConfiguredGroups()) {
+			if (!isGroupEnabled(group)) {
+				this.logger.warn("The request interval of the '%s' property group is ignored because the group is not enabled in displayPropertyGroups".formatted(group));
+			}
+		}
+	}
+
+	/**
+	 * Replaces the time source used to decide whether a property group's request interval has passed.
+	 *
+	 * @param clock the source of the current time, in epoch millis
+	 */
+	void setClock(LongSupplier clock) {
+		this.clock = clock;
+	}
+
+	/**
+	 * Makes a cached property group be requested from the device at the next cycle, whatever its request interval.
+	 * Called after a control of that group runs, so the group shows the result of the control rather than the state
+	 * cached before it. A group that is not cached is unaffected, since it is requested every cycle anyway.
+	 *
+	 * @param group the property group name
+	 */
+	void refreshGroupOnNextCycle(String group) {
+		this.groupResults.remove(group);
 	}
 
 	@Override
@@ -289,24 +360,31 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		this.callDiagnosticStatus = Constant.CALL_DIAGNOSTICS_NOT_DIALED;
 		this.callDiagnosticCallId = Constant.NOT_AVAILABLE;
 		this.callDiagnosticReleaseCause = Constant.NOT_AVAILABLE;
+		this.groupResults.clear();
 		super.internalDestroy();
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * <p>
+	 * AdapterMetadata, General and Network are built at every call. CallDiagnostics is refreshed at every call while it
+	 * is enabled. Every other enabled group is requested at every call unless it has a request interval set, in which
+	 * case it is requested only once the interval has passed (see {@link #retrieveGroup}) and otherwise contributes
+	 * its cached statistics, including to the historical properties.
+	 */
 	@Override
 	public List<Statistics> getMultipleStatistics() throws Exception {
 		reentrantLock.lock();
 		try {
+			long now = this.clock.getAsLong();
 			Map<String, String> stats = new HashMap<>();
 			List<AdvancedControllableProperty> controls = new ArrayList<>();
 			retrieveMetadata(stats);
 			retrieveDeviceStatus(stats);
-			retrieveKpiGroups(stats);
-			retrieveIpGroupStatistics(stats);
+			retrieveKpiGroups(stats, now);
+			retrieveGroup(stats, Constant.IP_GROUP_STATISTICS_GROUP, now, this::retrieveIpGroupStatistics);
 			retrieveCallDiagnostics(stats, controls);
-			if (isGroupEnabled(Constant.ACTIVE_ALARM)) {
-				this.setupData();
-				stats.putAll(Util.generateActiveAlarmsProperties(this.alarmsList));
-			}
+			retrieveGroup(stats, Constant.ACTIVE_ALARM, now, this::retrieveActiveAlarms);
 			Map<String, String> dynamicStats = extractHistoricalProperties(stats);
 			this.localExtendedStatistics.setStatistics(stats);
 			this.localExtendedStatistics.setDynamicStatistics(dynamicStats);
@@ -315,6 +393,61 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			reentrantLock.unlock();
 		}
 		return List.of(this.localExtendedStatistics, this.localEndpointStatistics);
+	}
+
+	/**
+	 * Adds one cacheable property group to {@code stats}, if it is enabled by {@link #displayPropertyGroups}.
+	 * <p>
+	 * The group is requested from the device when it is due (see {@link #isGroupDue}); otherwise its cached result is
+	 * used. Only a group with a request interval set is cached, and only such a group also gets a
+	 * {@code <Group>#DataRetrievedTime} property holding the time of its last request. If the request throws, nothing
+	 * is stored and the exception aborts the cycle, as before request intervals existed.
+	 *
+	 * @param stats the map to add the group's statistics to
+	 * @param group the property group name
+	 * @param now the start of the cycle, in epoch millis
+	 * @param fetcher requests the group from the device
+	 * @throws Exception if the request fails in a way that aborts the cycle
+	 */
+	private void retrieveGroup(Map<String, String> stats, String group, long now, GroupFetcher fetcher) throws Exception {
+		if (!isGroupEnabled(group)) {
+			this.groupResults.remove(group);
+			return;
+		}
+		boolean cached = isRequestIntervalConfigured(group);
+		GroupResult result = this.groupResults.get(group);
+		if (!cached || isGroupDue(group, result, now)) {
+			Map<String, String> groupStats = new HashMap<>();
+			boolean complete = fetcher.fetch(groupStats);
+			result = new GroupResult(groupStats, now, complete);
+			if (cached) {
+				this.groupResults.put(group, result);
+			} else {
+				this.groupResults.remove(group);
+			}
+		}
+		stats.putAll(result.stats());
+		if (cached) {
+			stats.put(group + Constant.HASH + Constant.DATA_RETRIEVED_TIME, DATA_RETRIEVED_TIME_FORMATTER.format(Instant.ofEpochMilli(result.fetchedAt())));
+		}
+	}
+
+	/**
+	 * Checks whether a cached property group has to be requested in the cycle that starts at {@code now}: it has no
+	 * stored result, its last request did not fully succeed, or its request interval has passed since that request,
+	 * allowing {@link Constant#REQUEST_INTERVAL_TOLERANCE_MS} for a cycle that arrives slightly early.
+	 *
+	 * @param group the property group name
+	 * @param result the stored result of the group, or {@code null}
+	 * @param now the start of the cycle, in epoch millis
+	 * @return {@code true} if the group is requested in this cycle
+	 */
+	private boolean isGroupDue(String group, GroupResult result, long now) {
+		if (result == null || !result.complete()) {
+			return true;
+		}
+		long intervalMs = getRequestIntervalSeconds(group) * 1000L;
+		return now - result.fetchedAt() >= intervalMs - Constant.REQUEST_INTERVAL_TOLERANCE_MS;
 	}
 
 	/**
@@ -411,6 +544,13 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 				stopCallDiagnostic();
 			} else {
 				throw new IllegalArgumentException("Unsupported control property: '%s'".formatted(property));
+			}
+			//	If the control's group is cached, request it again at the next cycle so it shows the control's result.
+			//	CallDiagnostics, the only group with controls today, is never cached; this keeps any future control on a
+			//	cached group from being masked by data cached before it ran.
+			int hashIndex = property.indexOf(Constant.HASH);
+			if (hashIndex > 0) {
+				refreshGroupOnNextCycle(property.substring(0, hashIndex));
 			}
 
 			//	Reflect the change in the live stats map immediately rather than waiting for the next poll cycle.
@@ -561,25 +701,27 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * malformed payload. The same applies per-alarm: if a specific alarm's detail response cannot
 	 * be parsed, that alarm is skipped (logged) without discarding the rest of the refreshed list.
 	 *
+	 * @return {@code true} if the list and every alarm detail were parsed; {@code false} if either case above applied
 	 * @throws FailedLoginException if the HTTP request fails due to authentication or connectivity issues
 	 */
-	private void setupData() throws Exception {
+	private boolean setupData() throws Exception {
 		AlarmsResponse alarmsResponse;
 		try {
 			alarmsResponse = fetchAndConvert(Constant.ACTIVE_ALARMS_API, AlarmsResponse.class);
 		} catch (DataConversionException e) {
 			//	Malformed/unexpected payload - keep the previously cached alarms list.
 			this.logger.warn("Retaining previously cached alarms list due to a malformed response from %s".formatted(Constant.ACTIVE_ALARMS_API), e);
-			return;
+			return false;
 		}
 
 		List<Alarms> alarmRefs = alarmsResponse == null ? null : alarmsResponse.getAlarms();
 		if (alarmRefs == null || alarmRefs.isEmpty()) {
 			//	No content, or an empty/absent "alarms" array - the device is reporting zero active alarms.
 			this.alarmsList = new ArrayList<>();
-			return;
+			return true;
 		}
 
+		boolean complete = true;
 		List<Alarms> fullAlarmsList = new ArrayList<>();
 		for (Alarms alarm : alarmRefs) {
 			try {
@@ -589,9 +731,26 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 				}
 			} catch (DataConversionException e) {
 				this.logger.error("Skipping alarm '%s' due to a malformed detail response.".formatted(alarm.getId()), e);
+				complete = false;
 			}
 		}
 		this.alarmsList = fullAlarmsList;
+		return complete;
+	}
+
+	/**
+	 * Refreshes {@link #alarmsList} from the device (see {@link #setupData()}) and adds the {@code ActiveAlarms}
+	 * summary and per-alarm properties built from it to {@code groupStats}.
+	 *
+	 * @param groupStats the map to populate with the ActiveAlarms statistics
+	 * @return {@code true} if the alarm list and every alarm detail were read; {@code false} if a malformed response
+	 * left the list or an alarm out of date
+	 * @throws Exception if a request fails
+	 */
+	private boolean retrieveActiveAlarms(Map<String, String> groupStats) throws Exception {
+		boolean complete = setupData();
+		groupStats.putAll(Util.generateActiveAlarmsProperties(this.alarmsList));
+		return complete;
 	}
 
 	/**
@@ -633,32 +792,45 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * Each group is paired with the device KPI scope backing it. Most scopes map one-to-one onto a display
 	 * group, except {@link Constant#CALL_STATS_KPI_API}, which backs all seven {@code Call*Statistics}
 	 * groups, and {@link Constant#SBC_OTHER_STATS_KPI_API}, which backs
-	 * {@link Constant#REGISTRATION_STATISTICS_GROUP}.
+	 * {@link Constant#REGISTRATION_STATISTICS_GROUP}. Each group goes through {@link #retrieveGroup}, so a group
+	 * with a request interval set is served from its cached result until the interval passes.
 	 *
 	 * @param stats the map to populate with property display names as keys
 	 * and their corresponding string values as values; must not be {@code null}
-	 * @throws FailedLoginException if a KPI request fails due to authentication issues
+	 * @param now the start of the cycle, in epoch millis
+	 * @throws Exception if a KPI request fails due to authentication issues
 	 */
-	private void retrieveKpiGroups(Map<String, String> stats) throws FailedLoginException {
-		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_LOAD_STATISTICS_GROUP, CallLoadStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_QUALITY_STATISTICS_GROUP, CallQualityStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_TERMINATION_STATISTICS_GROUP, CallTerminationStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_MEDIA_ISSUES_STATISTICS_GROUP, CallMediaIssuesStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_CAPACITY_STATISTICS_GROUP, CallCapacityStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_ROUTING_STATISTICS_GROUP, CallRoutingStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.CALL_STATS_KPI_API, Constant.CALL_TRAFFIC_STATISTICS_GROUP, CallTrafficStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.MEDIA_STATS_KPI_API, Constant.MEDIA_STATISTICS_GROUP, MediaStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.MEDIA_DSP_STATS_KPI_API, Constant.MEDIA_DSP_STATISTICS_GROUP, MediaDspStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.MEDIA_CLUSTER_STATS_KPI_API, Constant.MEDIA_CLUSTER_STATISTICS_GROUP, MediaClusterStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.SBC_OTHER_STATS_KPI_API, Constant.REGISTRATION_STATISTICS_GROUP, RegistrationStatsProperty.values());
-		retrieveKpiGroup(stats, Constant.SIP_REC_STATS_KPI_API, Constant.SIP_REC_STATISTICS_GROUP, SipRecStatsProperty.values());
+	private void retrieveKpiGroups(Map<String, String> stats, long now) throws Exception {
+		retrieveGroup(stats, Constant.CALL_LOAD_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiGroup(groupStats, Constant.CALL_STATS_KPI_API, Constant.CALL_LOAD_STATISTICS_GROUP, CallLoadStatsProperty.values()));
+		retrieveGroup(stats, Constant.CALL_QUALITY_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiGroup(groupStats, Constant.CALL_STATS_KPI_API, Constant.CALL_QUALITY_STATISTICS_GROUP, CallQualityStatsProperty.values()));
+		retrieveGroup(stats, Constant.CALL_TERMINATION_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiGroup(groupStats, Constant.CALL_STATS_KPI_API, Constant.CALL_TERMINATION_STATISTICS_GROUP, CallTerminationStatsProperty.values()));
+		retrieveGroup(stats, Constant.CALL_MEDIA_ISSUES_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiGroup(groupStats, Constant.CALL_STATS_KPI_API, Constant.CALL_MEDIA_ISSUES_STATISTICS_GROUP, CallMediaIssuesStatsProperty.values()));
+		retrieveGroup(stats, Constant.CALL_CAPACITY_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiGroup(groupStats, Constant.CALL_STATS_KPI_API, Constant.CALL_CAPACITY_STATISTICS_GROUP, CallCapacityStatsProperty.values()));
+		retrieveGroup(stats, Constant.CALL_ROUTING_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiGroup(groupStats, Constant.CALL_STATS_KPI_API, Constant.CALL_ROUTING_STATISTICS_GROUP, CallRoutingStatsProperty.values()));
+		retrieveGroup(stats, Constant.CALL_TRAFFIC_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiGroup(groupStats, Constant.CALL_STATS_KPI_API, Constant.CALL_TRAFFIC_STATISTICS_GROUP, CallTrafficStatsProperty.values()));
+		retrieveGroup(stats, Constant.MEDIA_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiGroup(groupStats, Constant.MEDIA_STATS_KPI_API, Constant.MEDIA_STATISTICS_GROUP, MediaStatsProperty.values()));
+		retrieveGroup(stats, Constant.MEDIA_DSP_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiGroup(groupStats, Constant.MEDIA_DSP_STATS_KPI_API, Constant.MEDIA_DSP_STATISTICS_GROUP, MediaDspStatsProperty.values()));
+		retrieveGroup(stats, Constant.MEDIA_CLUSTER_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiGroup(groupStats, Constant.MEDIA_CLUSTER_STATS_KPI_API, Constant.MEDIA_CLUSTER_STATISTICS_GROUP, MediaClusterStatsProperty.values()));
+		retrieveGroup(stats, Constant.REGISTRATION_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiGroup(groupStats, Constant.SBC_OTHER_STATS_KPI_API, Constant.REGISTRATION_STATISTICS_GROUP, RegistrationStatsProperty.values()));
+		retrieveGroup(stats, Constant.SIP_REC_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiGroup(groupStats, Constant.SIP_REC_STATS_KPI_API, Constant.SIP_REC_STATISTICS_GROUP, SipRecStatsProperty.values()));
 	}
 
 	/**
 	 * Retrieves every {@code property} belonging to {@code groupName} from the {@code scopeApi} KPI scope,
-	 * populating {@code stats} with a {@code <groupName>#<PropertyName>} entry for each - but only if
-	 * {@code groupName} (or {@link Constant#CALL_STATS_ALL_GROUPS}) is present in
-	 * {@link #displayPropertyGroups}; otherwise this is a no-op and no request is made.
+	 * populating {@code stats} with a {@code <groupName>#<PropertyName>} entry for each. Whether the group is
+	 * enabled is checked by the caller, {@link #retrieveGroup}.
 	 * <p>
 	 * Each KPI is fetched independently via its own request. A {@code null} response (no content) is
 	 * reported as {@link Constant#NOT_AVAILABLE}, not as a zero: the device declining to supply a value
@@ -673,13 +845,13 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * @param scopeApi   the device KPI scope backing this group; the {@code kpiId} is appended to it
 	 * @param groupName  the group name gating and prefixing these properties
 	 * @param properties the KPI properties belonging to this group
+	 * @return {@code true} if every KPI request succeeded (a no-content response counts as success); {@code false}
+	 * if any KPI failed to be fetched or parsed, so a cached group is requested again at the next cycle
 	 * @throws FailedLoginException if a KPI request fails due to authentication issues
 	 */
-	private <T extends Enum<T> & KpiProperty> void retrieveKpiGroup(Map<String, String> stats, String scopeApi, String groupName, T[] properties)
+	private <T extends Enum<T> & KpiProperty> boolean retrieveKpiGroup(Map<String, String> stats, String scopeApi, String groupName, T[] properties)
 			throws FailedLoginException {
-		if (!isGroupEnabled(groupName)) {
-			return;
-		}
+		boolean complete = true;
 		for (T property : properties) {
 			String uri = scopeApi + Constant.SLASH + property.getKpiId();
 			String value;
@@ -689,35 +861,35 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			} catch (DataConversionException e) {
 				this.logger.error("Failed to parse the '%s' KPI response from %s".formatted(property.getKpiId(), uri), e);
 				value = null;
+				complete = false;
 			} catch (FailedLoginException e) {
 				throw e;
 			} catch (Exception e) {
 				this.logger.error("Failed to fetch the '%s' KPI from %s".formatted(property.getKpiId(), uri), e);
 				value = null;
+				complete = false;
 			}
 			stats.put(groupName + Constant.HASH + property.getName(), Util.getDefaultValueForNullData(value, false));
 		}
+		return complete;
 	}
 
 	/**
 	 * Retrieves the {@link IpGroupStatsProperty} KPIs of every IP Group configured on the device, populating
-	 * {@code stats} with an {@code IPGroup_<index>_<name>#<PropertyName>} entry per KPI and IP Group - but only if
-	 * {@link Constant#IP_GROUP_STATISTICS_GROUP} (or {@link Constant#CALL_STATS_ALL_GROUPS}) is present in
-	 * {@link #displayPropertyGroups}; otherwise this is a no-op and no request is made.
+	 * {@code stats} with an {@code IPGroup_<index>_<name>#<PropertyName>} entry per KPI and IP Group. Whether
+	 * {@link Constant#IP_GROUP_STATISTICS_GROUP} is enabled is checked by the caller, {@link #retrieveGroup}.
 	 * <p>
-	 * IP Groups are listed by {@link #discoverIpGroups()} on every poll; a failed listing is logged and no IP Group
-	 * statistics are reported for that poll. For each IP Group, every device scope used by
-	 * {@link IpGroupStatsProperty} is read with one request returning all KPIs of that scope. A KPI the device
-	 * does not return, or one whose scope request fails, is reported as {@link Constant#NOT_AVAILABLE}.
+	 * IP Groups are listed by {@link #discoverIpGroups()} each time this runs; a failed listing is logged and no IP
+	 * Group statistics are reported. For each IP Group, every device scope used by {@link IpGroupStatsProperty} is
+	 * read with one request returning all KPIs of that scope. A KPI the device does not return, or one whose scope
+	 * request fails, is reported as {@link Constant#NOT_AVAILABLE}.
 	 *
 	 * @param stats the map to populate with property display names as keys
 	 * and their corresponding string values as values; must not be {@code null}
+	 * @return {@code true} if the listing and every scope request succeeded; {@code false} otherwise
 	 * @throws FailedLoginException if a request fails due to authentication issues
 	 */
-	private void retrieveIpGroupStatistics(Map<String, String> stats) throws FailedLoginException {
-		if (!isGroupEnabled(Constant.IP_GROUP_STATISTICS_GROUP)) {
-			return;
-		}
+	private boolean retrieveIpGroupStatistics(Map<String, String> stats) throws FailedLoginException {
 		Map<String, List<IpGroupStatsProperty>> propertiesByScope = Arrays.stream(IpGroupStatsProperty.values())
 				.collect(Collectors.groupingBy(IpGroupStatsProperty::getScopeApi, LinkedHashMap::new, Collectors.toList()));
 		List<KpiItem> ipGroups;
@@ -727,18 +899,24 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			throw e;
 		} catch (Exception e) {
 			this.logger.error("Failed to list the IP Groups from %s".formatted(Constant.IP_GROUP_CALL_STATS_KPI_API), e);
-			return;
+			return false;
 		}
+		boolean complete = true;
 		for (KpiItem ipGroup : ipGroups) {
 			String groupName = buildIpGroupName(ipGroup);
 			for (Map.Entry<String, List<IpGroupStatsProperty>> scope : propertiesByScope.entrySet()) {
 				Map<String, String> values = fetchIpGroupKpiValues(scope.getKey(), ipGroup.getId());
+				if (values == null) {
+					complete = false;
+					values = Map.of();
+				}
 				for (IpGroupStatsProperty property : scope.getValue()) {
 					stats.put(groupName + Constant.HASH + property.getName(),
 							Util.getDefaultValueForNullData(values.get(property.getKpiId()), false));
 				}
 			}
 		}
+		return complete;
 	}
 
 	/**
@@ -780,11 +958,11 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 
 	/**
 	 * Reads every KPI of one IP Group from one device scope ({@code <scopeApi>/<ipGroupId>}).
-	 * A failed or malformed response is logged and yields an empty map.
+	 * A failed or malformed response is logged and yields {@code null}.
 	 *
 	 * @param scopeApi  the IP Group entity path of the device scope, e.g. {@link Constant#IP_GROUP_CALL_STATS_KPI_API}
 	 * @param ipGroupId the IP Group index
-	 * @return the KPI values keyed by KPI id
+	 * @return the KPI values keyed by KPI id; {@code null} if the request failed
 	 * @throws FailedLoginException if the request fails due to authentication issues
 	 */
 	private Map<String, String> fetchIpGroupKpiValues(String scopeApi, String ipGroupId) throws FailedLoginException {
@@ -800,6 +978,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 			throw e;
 		} catch (Exception e) {
 			this.logger.error("Failed to fetch the IP Group KPIs from %s".formatted(uri), e);
+			return null;
 		}
 		return values;
 	}
