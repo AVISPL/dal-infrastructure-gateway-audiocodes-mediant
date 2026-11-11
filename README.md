@@ -56,7 +56,7 @@ Adapter behavior can be tuned via the following Adapter Configuration Parameters
 | Property | Description |
 | --- | --- |
 | displayPropertyGroups | Comma-separated list of optional property groups to display. Defaults to All. Possible values: All (default), Network, ActiveAlarms, CallDiagnostics, CallLoadStatistics, CallQualityStatistics, CallTerminationStatistics, CallMediaIssuesStatistics, CallCapacityStatistics, CallRoutingStatistics, CallTrafficStatistics, MediaStatistics, MediaDSPStatistics, MediaClusterStatistics, RegistrationStatistics, SIPRecStatistics. General and Adapter Metadata properties are never gated and are always shown. A group that is not enabled is not requested from the device at all. How often an enabled group is requested is set by the request interval properties below. |
-| historicalProperties | Comma-separated list of properties reported as dynamic statistics, so Symphony stores them as a time series and can graph them. Defaults to none. Give the property name only, without the group prefix. Possible values: AnswerSeizureRatio(%), NetworkEffectivenessRatio(%), FailedCallsInRatio(%), FailedCallsOutRatio(%), PostDialDelay(sec), ActiveSessions, AttemptedCallsRateIn(cps), AttemptedCallsRateOut(cps), MediaPacketLossIn(%), MediaPacketLossOut(%), MediaJitterIn(ms), MediaJitterOut(ms), MediaBandwidthIn(Kbps), MediaBandwidthOut(Kbps), DSPResourceCurrent(%), RegisteredUsers. Example: AnswerSeizureRatio(%),ActiveSessions,MediaJitterIn(ms). This is a storage and graphing parameter; how often a property's group is requested is set by the request interval properties below. |
+| historicalProperties | Comma-separated list of properties reported as dynamic statistics, so Symphony stores them as a time series and can graph them. Defaults to none. Give the property name only, without the group prefix. Possible values: CurrentASR(%), NetworkEffectivenessRatio(%), FailedCallsInRatio(%), FailedCallsOutRatio(%), PostDialDelay(sec), ActiveSessions, AttemptedCallsRateIn(cps), AttemptedCallsRateOut(cps), MediaPacketLossIn(%), MediaPacketLossOut(%), MediaJitterIn(ms), MediaJitterOut(ms), MediaBandwidthIn(Kbps), MediaBandwidthOut(Kbps), DSPResourceCurrent(%), RegisteredUsers. Example: CurrentASR(%),ActiveSessions,MediaJitterIn(ms). This is a storage and graphing parameter; how often a property's group is requested is set by the request interval properties below. |
 | `<group>RequestInterval` (13 properties, one per cacheable property group: activeAlarmsRequestInterval, callLoadStatisticsRequestInterval, callQualityStatisticsRequestInterval, callTerminationStatisticsRequestInterval, callMediaIssuesStatisticsRequestInterval, callCapacityStatisticsRequestInterval, callRoutingStatisticsRequestInterval, callTrafficStatisticsRequestInterval, mediaStatisticsRequestInterval, mediaDspStatisticsRequestInterval, mediaClusterStatisticsRequestInterval, registrationStatisticsRequestInterval, sipRecStatisticsRequestInterval) | Sets, in seconds, how long the adapter reuses a property group's data before requesting that group from the device again, to reduce the number of requests sent to the device. The property name is the group name in lower camel case followed by RequestInterval, for example mediaStatisticsRequestInterval. Applies only to groups enabled in displayPropertyGroups. Default: not set, meaning the group is requested at every monitoring cycle. Valid values: a whole number from 60 to 86400 (24 hours). A non-numeric or out-of-range value uses 60 and logs a warning; a blank value clears the interval. |
 
 Note: displayPropertyGroups and historicalProperties are matched case-sensitively. Unrecognised displayPropertyGroups values are ignored and logged as a warning listing the supported values; if every supplied value is unrecognised, the adapter falls back to All and logs a separate warning.
@@ -97,16 +97,16 @@ The AudioCodes Mediant adapter exposes properties across the following groups. C
 
 | Property Group | Description |
 |---|---|
-| General (ungrouped) | High Availability, Local Timestamp, MC Upgrade Status, Operational State, Product Type, Protocol Type, Reset Needed, Save Needed, Serial Number, System Uptime (sec), Upgrade Status, Version ID. These keys are emitted without a group prefix, so they appear at the top of Extended Properties rather than under a General heading |
+| General (ungrouped) | High Availability, Local Timestamp, MC Upgrade Status, Operational State, Product Type, Protocol Type, Reset Needed, Save Needed, Serial Number, System Uptime (sec), Upgrade Status, Software Version. These keys are emitted without a group prefix, so they appear at the top of Extended Properties rather than under a General heading |
 | Adapter Metadata | Active Property Groups, Adapter Build Date, Adapter Uptime, Adapter Uptime (min), Adapter Version |
 | Network | Default Gateway, IP Address, MAC Address, Subnet Mask |
-| Active Alarms | Count, Severity (comma-separated list of the distinct severities across all active alarms), Sources (comma-separated list of the distinct sources) |
-| Active Alarms per alarm (ActiveAlarms_[AlarmID]) | Date, Description, Severity, Source. Each active alarm is reported in its own group, named using the device's own identifier for that alarm; those identifiers come from the device and are not sequential |
+| Active Alarms | Count, Severity (comma-separated list of the distinct severities across all active alarms), Source (comma-separated list of the distinct sources) |
+| Active Alarms per alarm (ActiveAlarm_[AlarmID]) | Description, Severity, Source, Timestamp. Each active alarm is reported in its own group, named using the device's own identifier for that alarm; those identifiers come from the device and are not sequential |
 | Call Diagnostics | Called Number*, Calling Number*, Destination*, Start*, Stop*, Call ID, Release Cause, Status |
 | Call Capacity Statistics | Admission Failed Calls In Total, Admission Failed Calls Out Total, No Resources Calls In Total, No Resources Calls Out Total |
 | Call Load Statistics | Active Sessions (graphable), Busy Calls In Total, Busy Calls Out Total |
 | Call Media Issues Statistics | Media Mismatch Calls In Total, Media Mismatch Calls Out Total |
-| Call Quality Statistics | Answer Seizure Ratio (%) (graphable), Failed Calls In Ratio (%) (graphable), Failed Calls Out Ratio (%) (graphable), Network Effectiveness Ratio (%) (graphable), Post Dial Delay (sec) (graphable) |
+| Call Quality Statistics | Current ASR (%) (graphable), Failed Calls In Ratio (%) (graphable), Failed Calls Out Ratio (%) (graphable), Network Effectiveness Ratio (%) (graphable), Post Dial Delay (sec) (graphable) |
 | Call Routing Statistics | No Route Calls In Total |
 | Call Termination Statistics | Abnormal Terminated Calls In Total, Abnormal Terminated Calls Out Total, Media Broken Connection Calls Total |
 | Call Traffic Statistics | Attempted Calls Rate In (cps) (graphable), Attempted Calls Rate Out (cps) (graphable), No Answer Calls In Total, No Answer Calls Out Total |
@@ -125,6 +125,22 @@ The AudioCodes Mediant adapter exposes properties across the following groups. C
 | Destination* | The destination address the device routes the test call to. Per the AudioCodes REST API this is an IP address or DNS name, optionally with a port - not a SIP URI. Maximum 50 characters |
 | Start* | Dials a new test call using the staged Called Number, Calling Number and Destination values |
 | Stop* | Drops the active test call. Shown only while a call is active |
+
+**Renamed properties:**
+
+The following properties were renamed. Each appears only under its new name; the old names are no longer reported.
+
+| Previous name | New name |
+|---|---|
+| ActiveAlarms_[AlarmID] (per-alarm group) | ActiveAlarm_[AlarmID] |
+| ActiveAlarms#Sources | ActiveAlarms#Source |
+| ActiveAlarms_[AlarmID]#Date | ActiveAlarm_[AlarmID]#Timestamp |
+| CallQualityStatistics#AnswerSeizureRatio(%) | CallQualityStatistics#CurrentASR(%) |
+| VersionID | SoftwareVersion |
+
+The ActiveAlarms summary group, its Count property, the ActiveAlarms value of displayPropertyGroups and activeAlarmsRequestInterval are unchanged.
+
+If historicalProperties contains AnswerSeizureRatio(%), replace it with CurrentASR(%). The old name is no longer supported: it is ignored with a warning in the log, and the ASR graph stops updating until CurrentASR(%) is selected. Graph history recorded under AnswerSeizureRatio(%) does not carry over to CurrentASR(%), which starts a new time series.
 
 **Notes:**
 - The General and Network properties are both sourced from the device's status response. If that response is unavailable, neither set is reported for that polling cycle.
