@@ -138,19 +138,6 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	private Set<String> historicalProperties = new LinkedHashSet<>();
 
 	/**
-	 * Minimum time, in seconds, between two IP Group discoveries ({@link #discoverIpGroups()}). Between
-	 * discoveries, the IP Groups in {@link #cachedIpGroups} are polled. Kept within
-	 * {@link Constant#IP_GROUP_DISCOVERY_INTERVAL_MIN_SECONDS} and {@link Constant#IP_GROUP_DISCOVERY_INTERVAL_MAX_SECONDS}.
-	 */
-	private long ipGroupDiscoveryInterval = Constant.IP_GROUP_DISCOVERY_INTERVAL_DEFAULT_SECONDS;
-
-	/** IP Group entities returned by the last successful IP Group discovery. */
-	private List<KpiItem> cachedIpGroups = new ArrayList<>();
-
-	/** Time of the last successful IP Group discovery, in epoch milliseconds; {@code 0} if none has succeeded. */
-	private long lastIpGroupDiscoveryTimestamp;
-
-	/**
 	 * Jackson ObjectMapper for JSON deserialization. Initialized eagerly in the constructor
 	 * to prevent NullPointerException if {@code convertNode} is invoked before {@code internalInit}.
 	 */
@@ -263,37 +250,6 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 				.collect(Collectors.toCollection(LinkedHashSet::new));
 	}
 
-	public String getIpGroupDiscoveryInterval() {
-		return String.valueOf(this.ipGroupDiscoveryInterval);
-	}
-
-	/**
-	 * Sets the minimum time, in seconds, between two IP Group discoveries. A value below
-	 * {@link Constant#IP_GROUP_DISCOVERY_INTERVAL_MIN_SECONDS} or above
-	 * {@link Constant#IP_GROUP_DISCOVERY_INTERVAL_MAX_SECONDS} is set to that bound; a blank or non-numeric value
-	 * selects {@link Constant#IP_GROUP_DISCOVERY_INTERVAL_DEFAULT_SECONDS}. Both cases are logged as a warning.
-	 *
-	 * @param ipGroupDiscoveryInterval interval in seconds
-	 */
-	public void setIpGroupDiscoveryInterval(String ipGroupDiscoveryInterval) {
-		long interval;
-		try {
-			interval = Long.parseLong(StringUtils.isNullOrEmpty(ipGroupDiscoveryInterval, true) ? "" : ipGroupDiscoveryInterval.strip());
-		} catch (NumberFormatException e) {
-			this.logger.warn("Invalid ipGroupDiscoveryInterval value '%s'; using the default of %d seconds".formatted(
-					ipGroupDiscoveryInterval, Constant.IP_GROUP_DISCOVERY_INTERVAL_DEFAULT_SECONDS));
-			this.ipGroupDiscoveryInterval = Constant.IP_GROUP_DISCOVERY_INTERVAL_DEFAULT_SECONDS;
-			return;
-		}
-		long boundedInterval = Math.max(Constant.IP_GROUP_DISCOVERY_INTERVAL_MIN_SECONDS,
-				Math.min(Constant.IP_GROUP_DISCOVERY_INTERVAL_MAX_SECONDS, interval));
-		if (boundedInterval != interval) {
-			this.logger.warn("ipGroupDiscoveryInterval value %d is outside [%d, %d] seconds; using %d seconds".formatted(
-					interval, Constant.IP_GROUP_DISCOVERY_INTERVAL_MIN_SECONDS, Constant.IP_GROUP_DISCOVERY_INTERVAL_MAX_SECONDS, boundedInterval));
-		}
-		this.ipGroupDiscoveryInterval = boundedInterval;
-	}
-
 	/**
 	 * Whether {@code groupName} should be fetched/displayed this cycle - either it's explicitly
 	 * listed in {@link #displayPropertyGroups}, or {@link Constant#CALL_STATS_ALL_GROUPS} is.
@@ -327,8 +283,6 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		this.localExtendedStatistics.setControllableProperties(new ArrayList<>());
 		//	Clear the populated data
 		this.adapterProperties.clear();
-		this.cachedIpGroups = new ArrayList<>();
-		this.lastIpGroupDiscoveryTimestamp = 0;
 		this.deviceStatus = new Status();
 		this.callDiagnosticSessionId = null;
 		clearCallDiagnosticConfig();
@@ -751,7 +705,8 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	 * {@link Constant#IP_GROUP_STATISTICS_GROUP} (or {@link Constant#CALL_STATS_ALL_GROUPS}) is present in
 	 * {@link #displayPropertyGroups}; otherwise this is a no-op and no request is made.
 	 * <p>
-	 * IP Groups are taken from {@link #getIpGroups()}. For each IP Group, every device scope used by
+	 * IP Groups are listed by {@link #discoverIpGroups()} on every poll; a failed listing is logged and no IP Group
+	 * statistics are reported for that poll. For each IP Group, every device scope used by
 	 * {@link IpGroupStatsProperty} is read with one request returning all KPIs of that scope. A KPI the device
 	 * does not return, or one whose scope request fails, is reported as {@link Constant#NOT_AVAILABLE}.
 	 *
@@ -765,7 +720,16 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		}
 		Map<String, List<IpGroupStatsProperty>> propertiesByScope = Arrays.stream(IpGroupStatsProperty.values())
 				.collect(Collectors.groupingBy(IpGroupStatsProperty::getScopeApi, LinkedHashMap::new, Collectors.toList()));
-		for (KpiItem ipGroup : getIpGroups()) {
+		List<KpiItem> ipGroups;
+		try {
+			ipGroups = discoverIpGroups();
+		} catch (FailedLoginException e) {
+			throw e;
+		} catch (Exception e) {
+			this.logger.error("Failed to list the IP Groups from %s".formatted(Constant.IP_GROUP_CALL_STATS_KPI_API), e);
+			return;
+		}
+		for (KpiItem ipGroup : ipGroups) {
 			String groupName = buildIpGroupName(ipGroup);
 			for (Map.Entry<String, List<IpGroupStatsProperty>> scope : propertiesByScope.entrySet()) {
 				Map<String, String> values = fetchIpGroupKpiValues(scope.getKey(), ipGroup.getId());
@@ -778,36 +742,9 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 	}
 
 	/**
-	 * Returns the IP Groups to poll. A new {@link #discoverIpGroups()} is run when none has succeeded yet, or when
-	 * {@link #ipGroupDiscoveryInterval} seconds have passed since the last successful one; its result replaces
-	 * {@link #cachedIpGroups}. Otherwise {@link #cachedIpGroups} is returned without a request. A failed discovery
-	 * is logged, leaves {@link #cachedIpGroups} unchanged and is run again on the next poll.
-	 *
-	 * @return the IP Group entities to poll; empty if none are known
-	 * @throws FailedLoginException if the discovery fails due to authentication issues
-	 */
-	private List<KpiItem> getIpGroups() throws FailedLoginException {
-		long now = System.currentTimeMillis();
-		if (this.lastIpGroupDiscoveryTimestamp != 0
-				&& now - this.lastIpGroupDiscoveryTimestamp < this.ipGroupDiscoveryInterval * 1000) {
-			return this.cachedIpGroups;
-		}
-		try {
-			this.cachedIpGroups = discoverIpGroups();
-			this.lastIpGroupDiscoveryTimestamp = now;
-		} catch (FailedLoginException e) {
-			throw e;
-		} catch (Exception e) {
-			this.logger.error("Failed to list the IP Groups; polling the %d previously listed IP Groups".formatted(this.cachedIpGroups.size()), e);
-		}
-		return this.cachedIpGroups;
-	}
-
-	/**
 	 * Lists the IP Group entities configured on the device from {@link Constant#IP_GROUP_CALL_STATS_KPI_API},
-	 * with names and descriptions ({@code detailed=true}), {@link Constant#IP_GROUP_DISCOVERY_PAGE_SIZE} entries per
-	 * request ({@code limit}). A page with fewer entries than that ends the listing; otherwise the next page is
-	 * requested with {@code after=<last index>}, until a page adds no new index or
+	 * with names and descriptions ({@code detailed=true}). Further pages are requested with
+	 * {@code after=<last index>} until the device returns no entries or no new index, or
 	 * {@link Constant#IP_GROUP_DISCOVERY_MAX_PAGES} pages have been read. Entries without an id are skipped.
 	 *
 	 * @return the IP Group entities in device order; empty if the device has none
@@ -821,8 +758,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 		String after = null;
 		for (int page = 0; page < Constant.IP_GROUP_DISCOVERY_MAX_PAGES; page++) {
 			UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(Constant.IP_GROUP_CALL_STATS_KPI_API)
-					.queryParam(Constant.DETAILED_PARAM, true)
-					.queryParam(Constant.LIMIT_PARAM, Constant.IP_GROUP_DISCOVERY_PAGE_SIZE);
+					.queryParam(Constant.DETAILED_PARAM, true);
 			if (after != null) {
 				uriBuilder.queryParam(Constant.AFTER_PARAM, after);
 			}
@@ -835,7 +771,7 @@ public class AudioCodesMediantCommunicator extends Communicator implements Monit
 					newIpGroupFound = true;
 				}
 			}
-			if (!newIpGroupFound || items.size() < Constant.IP_GROUP_DISCOVERY_PAGE_SIZE) {
+			if (!newIpGroupFound) {
 				break;
 			}
 		}

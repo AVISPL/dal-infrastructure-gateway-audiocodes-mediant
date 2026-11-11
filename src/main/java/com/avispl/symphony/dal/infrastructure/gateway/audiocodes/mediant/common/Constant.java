@@ -69,15 +69,8 @@ public class Constant {
 	public static final String IP_GROUP_SIP_REC_STATS_KPI_API = "/kpi/current/sbc/sipRecStats/ipGroup";
 	public static final String DETAILED_PARAM = "detailed";
 	public static final String AFTER_PARAM = "after";
-	public static final String LIMIT_PARAM = "limit";
-	//	Number of IP Group entities requested per listing page.
-	public static final int IP_GROUP_DISCOVERY_PAGE_SIZE = 100;
 	//	Maximum number of IP Group listing pages requested in one discovery.
 	public static final int IP_GROUP_DISCOVERY_MAX_PAGES = 50;
-	//	Bounds and default of the ipGroupDiscoveryInterval adapter property, in seconds.
-	public static final long IP_GROUP_DISCOVERY_INTERVAL_MIN_SECONDS = 60;
-	public static final long IP_GROUP_DISCOVERY_INTERVAL_MAX_SECONDS = 86_400;
-	public static final long IP_GROUP_DISCOVERY_INTERVAL_DEFAULT_SECONDS = 3_600;
 	public static final String TEST_CALL_DIAL_API = "/sipTestCall/dial";
 	public static final String TEST_CALL_STATUS_API = "/sipTestCall/getStatus";
 	public static final String TEST_CALL_SHOW_API = "/sipTestCall/show";

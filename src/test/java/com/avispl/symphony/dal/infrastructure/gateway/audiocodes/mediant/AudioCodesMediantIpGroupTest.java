@@ -53,16 +53,6 @@ class AudioCodesMediantIpGroupTest {
 	}
 
 	@Test
-	void testGetMultipleStatistics_reportsIpGroupsBetweenDiscoveries() throws Exception {
-		this.communicator.setIpGroupDiscoveryInterval(String.valueOf(Constant.IP_GROUP_DISCOVERY_INTERVAL_MAX_SECONDS));
-
-		Assertions.assertEquals(SIMULATOR_IP_GROUPS, this.ipGroupNames(this.pollStatistics()));
-		Map<String, String> secondPoll = this.pollStatistics();
-		Assertions.assertEquals(SIMULATOR_IP_GROUPS, this.ipGroupNames(secondPoll));
-		Assertions.assertEquals("42", secondPoll.get("IPGroup_1_PSTN1#ActiveCallsIn"));
-	}
-
-	@Test
 	void testGetMultipleStatistics_reportsEveryPropertyForEachIpGroup() throws Exception {
 		Map<String, String> stats = this.pollStatistics();
 
