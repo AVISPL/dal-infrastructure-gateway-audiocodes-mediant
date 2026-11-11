@@ -10,7 +10,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * Per-IP-Group KPIs, reported once for every IP Group under an {@code IPGroup_<index>_<name>} group.
+ * Per-IP-Group KPIs, reported once for every IP Group under an {@code IPGroupStatistics_<index>_<name>} group.
  * Each KPI is read from the IP Group entity of the device scope in {@link #getScopeApi()}
  * (e.g. {@code /kpi/current/sbc/callStats/ipGroup/<index>}).
  *

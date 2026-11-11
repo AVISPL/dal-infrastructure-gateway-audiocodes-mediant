@@ -30,7 +30,7 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.I
  */
 class AudioCodesMediantIpGroupTest {
 	private static final Set<String> SIMULATOR_IP_GROUPS = Set.of(
-			"IPGroup_1_PSTN1", "IPGroup_2_PSTN2", "IPGroup_3_Teams", "IPGroup_4_ContactCenter");
+			"IPGroupStatistics_1_PSTN1", "IPGroupStatistics_2_PSTN2", "IPGroupStatistics_3_Teams", "IPGroupStatistics_4_ContactCenter");
 
 	private AudioCodesMediantCommunicator communicator;
 
@@ -73,11 +73,11 @@ class AudioCodesMediantIpGroupTest {
 	void testGetMultipleStatistics_ipGroupValuesMatchSimulator() throws Exception {
 		Map<String, String> stats = this.pollStatistics();
 
-		Assertions.assertEquals("42", stats.get("IPGroup_1_PSTN1#ActiveCallsIn"));
-		Assertions.assertEquals("41", stats.get("IPGroup_2_PSTN2#MediaMOSIn"));
-		Assertions.assertEquals("94", stats.get("IPGroup_3_Teams#AnswerSeizureRatio(%)"));
-		Assertions.assertEquals("24", stats.get("IPGroup_4_ContactCenter#SIPRecSessions"));
-		Assertions.assertEquals("120", stats.get("IPGroup_4_ContactCenter#RegisteredUsers"));
+		Assertions.assertEquals("42", stats.get("IPGroupStatistics_1_PSTN1#ActiveCallsIn"));
+		Assertions.assertEquals("41", stats.get("IPGroupStatistics_2_PSTN2#MediaMOSIn"));
+		Assertions.assertEquals("94", stats.get("IPGroupStatistics_3_Teams#AnswerSeizureRatio(%)"));
+		Assertions.assertEquals("24", stats.get("IPGroupStatistics_4_ContactCenter#SIPRecSessions"));
+		Assertions.assertEquals("120", stats.get("IPGroupStatistics_4_ContactCenter#RegisteredUsers"));
 	}
 
 	@Test
@@ -85,7 +85,7 @@ class AudioCodesMediantIpGroupTest {
 		this.communicator.setDisplayPropertyGroups(Constant.CALL_QUALITY_STATISTICS_GROUP);
 		Map<String, String> stats = this.pollStatistics();
 
-		Assertions.assertTrue(stats.keySet().stream().noneMatch(key -> key.startsWith(Constant.IP_GROUP_PREFIX + Constant.UNDERSCORE)),
+		Assertions.assertTrue(stats.keySet().stream().noneMatch(key -> key.startsWith(Constant.IP_GROUP_STATISTICS_GROUP + Constant.UNDERSCORE)),
 				"Expected no IP Group properties when " + Constant.IP_GROUP_STATISTICS_GROUP + " is not displayed");
 		Assertions.assertTrue(stats.containsKey(Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + "AnswerSeizureRatio(%)"));
 	}
@@ -97,8 +97,8 @@ class AudioCodesMediantIpGroupTest {
 		Map<String, String> dynamicStats = statistics.getDynamicStatistics();
 
 		Assertions.assertTrue(dynamicStats.containsKey(Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + "AnswerSeizureRatio(%)"));
-		Assertions.assertTrue(dynamicStats.keySet().stream().noneMatch(key -> key.startsWith(Constant.IP_GROUP_PREFIX + Constant.UNDERSCORE)));
-		Assertions.assertEquals("94", statistics.getStatistics().get("IPGroup_3_Teams#AnswerSeizureRatio(%)"));
+		Assertions.assertTrue(dynamicStats.keySet().stream().noneMatch(key -> key.startsWith(Constant.IP_GROUP_STATISTICS_GROUP + Constant.UNDERSCORE)));
+		Assertions.assertEquals("94", statistics.getStatistics().get("IPGroupStatistics_3_Teams#AnswerSeizureRatio(%)"));
 	}
 
 	@Test
@@ -107,14 +107,14 @@ class AudioCodesMediantIpGroupTest {
 		String retrievedTimeKey = Constant.IP_GROUP_STATISTICS_GROUP + Constant.HASH + Constant.DATA_RETRIEVED_TIME;
 
 		Map<String, String> firstPoll = this.pollStatistics();
-		Assertions.assertEquals("42", firstPoll.get("IPGroup_1_PSTN1#ActiveCallsIn"));
+		Assertions.assertEquals("42", firstPoll.get("IPGroupStatistics_1_PSTN1#ActiveCallsIn"));
 		Assertions.assertTrue(firstPoll.containsKey(retrievedTimeKey));
 		try {
 			this.sendToSimulator("PUT", "/ipGroups/1", "{\"kpis\":{\"sbc/callStats\":{\"activeCallsIn\":7}}}");
 			Map<String, String> secondPoll = this.pollStatistics();
 
 			Assertions.assertEquals(SIMULATOR_IP_GROUPS, this.ipGroupNames(secondPoll));
-			Assertions.assertEquals("42", secondPoll.get("IPGroup_1_PSTN1#ActiveCallsIn"));
+			Assertions.assertEquals("42", secondPoll.get("IPGroupStatistics_1_PSTN1#ActiveCallsIn"));
 			Assertions.assertEquals(firstPoll.get(retrievedTimeKey), secondPoll.get(retrievedTimeKey));
 		} finally {
 			this.sendToSimulator("POST", "/reset", "{}");
@@ -135,7 +135,7 @@ class AudioCodesMediantIpGroupTest {
 
 	private Set<String> ipGroupNames(Map<String, String> stats) {
 		return stats.keySet().stream()
-				.filter(key -> key.startsWith(Constant.IP_GROUP_PREFIX + Constant.UNDERSCORE))
+				.filter(key -> key.startsWith(Constant.IP_GROUP_STATISTICS_GROUP + Constant.UNDERSCORE))
 				.map(key -> key.substring(0, key.indexOf(Constant.HASH)))
 				.collect(Collectors.toSet());
 	}

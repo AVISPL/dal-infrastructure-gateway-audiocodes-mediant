@@ -99,9 +99,8 @@ public class Constant {
 	public static final String MEDIA_CLUSTER_STATISTICS_GROUP = "MediaClusterStatistics";
 	public static final String REGISTRATION_STATISTICS_GROUP = "RegistrationStatistics";
 	public static final String SIP_REC_STATISTICS_GROUP = "SIPRecStatistics";
-	//	Enables the per-IP-Group statistics, reported as one IPGroup_<index>_<name> group per IP Group.
+	//	Enables the per-IP-Group statistics, reported as one IPGroupStatistics_<index>_<name> group per IP Group.
 	public static final String IP_GROUP_STATISTICS_GROUP = "IPGroupStatistics";
-	public static final String IP_GROUP_PREFIX = "IPGroup";
 	//	Every value displayPropertyGroups is allowed to contain; anything else is unsupported and dropped.
 	public static final Set<String> SUPPORTED_PROPERTY_GROUPS = Set.of(
 			CALL_STATS_ALL_GROUPS,

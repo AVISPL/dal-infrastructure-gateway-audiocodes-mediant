@@ -161,7 +161,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	 * report as dynamic statistics instead of static ones. A name is matched against the part of each
 	 * statistics key after {@link Constant#HASH}, or against the whole key for the ungrouped General
 	 * and Network properties, so a name two groups shared would be selected in both. IP Group statistics
-	 * ({@code IPGroup_<index>_<name>} groups) are never selected. Matching is otherwise exact - no normalisation, prefix matching or
+	 * ({@code IPGroupStatistics_<index>_<name>} groups) are never selected. Matching is otherwise exact - no normalisation, prefix matching or
 	 * unit-suffix stripping - so a full {@code <GroupName>#<PropertyName>} key is not a valid entry.
 	 * Only the names in {@link Constant#SUPPORTED_HISTORICAL_PROPERTIES} can reach this set; anything
 	 * else is dropped by {@link #setHistoricalProperties(String)}, so every entry here corresponds to
@@ -246,7 +246,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	 * {@link Constant#HASH}, so {@code AnswerSeizureRatio(%)} selects the
 	 * {@code CallQualityStatistics#AnswerSeizureRatio(%)} statistic. A name two groups shared would be
 	 * selected in both, and the ungrouped General and Network properties, whose keys carry no prefix,
-	 * are matched by their whole key. IP Group statistics ({@code IPGroup_<index>_<name>} groups) are never
+	 * are matched by their whole key. IP Group statistics ({@code IPGroupStatistics_<index>_<name>} groups) are never
 	 * selected. Matching is otherwise exact - no normalisation, prefix matching
 	 * or unit-suffix stripping is performed - so a full group-prefixed key is not a valid entry and is
 	 * rejected.
@@ -460,7 +460,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	 * {@link #displayPropertyGroups} - simply contributes nothing; a misspelled or group-prefixed name
 	 * cannot reach here, having been rejected by {@link #setHistoricalProperties(String)}.
 	 * <p>
-	 * IP Group statistics - keys starting with {@code IPGroup_} ({@link Constant#IP_GROUP_PREFIX}) - are skipped.
+	 * IP Group statistics - keys starting with {@code IPGroupStatistics_} ({@link Constant#IP_GROUP_STATISTICS_GROUP}) - are skipped.
 	 * <p>
 	 * {@code stats} is never modified: a selected property is reported as an extended property in
 	 * every case, carrying either the device's value or {@link Constant#NOT_AVAILABLE} when there is
@@ -497,7 +497,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 		}
 		for (Map.Entry<String, String> statistic : stats.entrySet()) {
 			String key = statistic.getKey();
-			if (key.startsWith(Constant.IP_GROUP_PREFIX + Constant.UNDERSCORE)) {
+			if (key.startsWith(Constant.IP_GROUP_STATISTICS_GROUP + Constant.UNDERSCORE)) {
 				continue;
 			}
 			int hashIndex = key.lastIndexOf(Constant.HASH);
@@ -876,7 +876,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 
 	/**
 	 * Retrieves the {@link IpGroupStatsProperty} KPIs of every IP Group configured on the device, populating
-	 * {@code stats} with an {@code IPGroup_<index>_<name>#<PropertyName>} entry per KPI and IP Group. Whether
+	 * {@code stats} with an {@code IPGroupStatistics_<index>_<name>#<PropertyName>} entry per KPI and IP Group. Whether
 	 * {@link Constant#IP_GROUP_STATISTICS_GROUP} is enabled is checked by the caller, {@link #retrieveGroup}.
 	 * <p>
 	 * IP Groups are listed by {@link #discoverIpGroups()} each time this runs; a failed listing is logged and no IP
@@ -1005,7 +1005,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	}
 
 	/**
-	 * Builds the statistics group name of an IP Group: {@code IPGroup_<index>_<name>}, or {@code IPGroup_<index>}
+	 * Builds the statistics group name of an IP Group: {@code IPGroupStatistics_<index>_<name>}, or {@code IPGroupStatistics_<index>}
 	 * when the device returns no name. {@link Constant#HASH} characters in the name are replaced with
 	 * {@link Constant#UNDERSCORE}.
 	 *
@@ -1013,7 +1013,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	 * @return the statistics group name
 	 */
 	private String buildIpGroupName(KpiItem ipGroup) {
-		String groupName = Constant.IP_GROUP_PREFIX + Constant.UNDERSCORE + ipGroup.getId();
+		String groupName = Constant.IP_GROUP_STATISTICS_GROUP + Constant.UNDERSCORE + ipGroup.getId();
 		if (StringUtils.isNullOrEmpty(ipGroup.getName(), true)) {
 			return groupName;
 		}
