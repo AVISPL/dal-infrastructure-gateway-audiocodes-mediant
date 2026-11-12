@@ -10,6 +10,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +55,7 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.C
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallRoutingStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallTerminationStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallTrafficStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.IpGroupStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaClusterStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaDspStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaStatsProperty;
@@ -61,6 +63,8 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.R
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.SipRecStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.Alarms;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.AlarmsResponse;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.KpiItem;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.KpiItemsResponse;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.KpiValue;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.TestCallConfig;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.TestCallDialResponse;
@@ -156,8 +160,8 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	 * the unit suffix included (e.g. {@code CurrentASR(%)}, {@code MediaJitterIn(ms)}) - to
 	 * report as dynamic statistics instead of static ones. A name is matched against the part of each
 	 * statistics key after {@link Constant#HASH}, or against the whole key for the ungrouped General
-	 * and Network properties, so a name two groups shared would be selected in both - no two groups
-	 * currently share one. Matching is otherwise exact - no normalisation, prefix matching or
+	 * and Network properties, so a name two groups shared would be selected in both. IP Group statistics
+	 * ({@code IPGroupStatistics_<index>_<name>} groups) are never selected. Matching is otherwise exact - no normalisation, prefix matching or
 	 * unit-suffix stripping - so a full {@code <GroupName>#<PropertyName>} key is not a valid entry.
 	 * Only the names in {@link Constant#SUPPORTED_HISTORICAL_PROPERTIES} can reach this set; anything
 	 * else is dropped by {@link #setHistoricalProperties(String)}, so every entry here corresponds to
@@ -242,7 +246,8 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	 * {@link Constant#HASH}, so {@code CurrentASR(%)} selects the
 	 * {@code CallQualityStatistics#CurrentASR(%)} statistic. A name two groups shared would be
 	 * selected in both, and the ungrouped General and Network properties, whose keys carry no prefix,
-	 * are matched by their whole key. Matching is otherwise exact - no normalisation, prefix matching
+	 * are matched by their whole key. IP Group statistics ({@code IPGroupStatistics_<index>_<name>} groups) are never
+	 * selected. Matching is otherwise exact - no normalisation, prefix matching
 	 * or unit-suffix stripping is performed - so a full group-prefixed key is not a valid entry and is
 	 * rejected.
 	 * <p>
@@ -377,6 +382,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 			retrieveMetadata(stats);
 			retrieveDeviceStatus(stats);
 			retrieveKpiGroups(stats, now);
+			retrieveGroup(stats, Constant.IP_GROUP_STATISTICS_GROUP, now, this::retrieveIpGroupStatistics);
 			retrieveCallDiagnostics(stats, controls);
 			retrieveGroup(stats, Constant.ACTIVE_ALARM, now, this::retrieveActiveAlarms);
 			Map<String, String> dynamicStats = extractHistoricalProperties(stats);
@@ -454,6 +460,8 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	 * {@link #displayPropertyGroups} - simply contributes nothing; a misspelled or group-prefixed name
 	 * cannot reach here, having been rejected by {@link #setHistoricalProperties(String)}.
 	 * <p>
+	 * IP Group statistics - keys starting with {@code IPGroupStatistics_} ({@link Constant#IP_GROUP_STATISTICS_GROUP}) - are skipped.
+	 * <p>
 	 * {@code stats} is never modified: a selected property is reported as an extended property in
 	 * every case, carrying either the device's value or {@link Constant#NOT_AVAILABLE} when there is
 	 * none, and is <em>additionally</em> reported as a dynamic statistic whenever that value is
@@ -489,6 +497,9 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 		}
 		for (Map.Entry<String, String> statistic : stats.entrySet()) {
 			String key = statistic.getKey();
+			if (key.startsWith(Constant.IP_GROUP_STATISTICS_GROUP + Constant.UNDERSCORE)) {
+				continue;
+			}
 			int hashIndex = key.lastIndexOf(Constant.HASH);
 			String propertyName = hashIndex < 0 ? key : key.substring(hashIndex + Constant.HASH.length());
 			if (!this.historicalProperties.contains(propertyName)) {
@@ -861,6 +872,152 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 			stats.put(groupName + Constant.HASH + property.getName(), Util.getDefaultValueForNullData(value, false));
 		}
 		return complete;
+	}
+
+	/**
+	 * Retrieves the {@link IpGroupStatsProperty} KPIs of every IP Group configured on the device, populating
+	 * {@code stats} with an {@code IPGroupStatistics_<index>_<name>#<PropertyName>} entry per KPI and IP Group. Whether
+	 * {@link Constant#IP_GROUP_STATISTICS_GROUP} is enabled is checked by the caller, {@link #retrieveGroup}.
+	 * <p>
+	 * IP Groups are listed by {@link #discoverIpGroups()} each time this runs; a failed listing is logged and no IP
+	 * Group statistics are reported. For each IP Group, every device scope used by {@link IpGroupStatsProperty} is
+	 * read with one request returning all KPIs of that scope. A KPI the device does not return, or one whose scope
+	 * request fails, is reported as {@link Constant#NOT_AVAILABLE}.
+	 *
+	 * @param stats the map to populate with property display names as keys
+	 * and their corresponding string values as values; must not be {@code null}
+	 * @return {@code true} if the listing and every scope request succeeded; {@code false} otherwise
+	 * @throws FailedLoginException if a request fails due to authentication issues
+	 */
+	private boolean retrieveIpGroupStatistics(Map<String, String> stats) throws FailedLoginException {
+		Map<String, List<IpGroupStatsProperty>> propertiesByScope = Arrays.stream(IpGroupStatsProperty.values())
+				.collect(Collectors.groupingBy(IpGroupStatsProperty::getScopeApi, LinkedHashMap::new, Collectors.toList()));
+		List<KpiItem> ipGroups;
+		try {
+			ipGroups = discoverIpGroups();
+		} catch (FailedLoginException e) {
+			throw e;
+		} catch (Exception e) {
+			this.logger.error("Failed to list the IP Groups from %s".formatted(Constant.IP_GROUP_CALL_STATS_KPI_API), e);
+			return false;
+		}
+		boolean complete = true;
+		for (KpiItem ipGroup : ipGroups) {
+			String groupName = buildIpGroupName(ipGroup);
+			for (Map.Entry<String, List<IpGroupStatsProperty>> scope : propertiesByScope.entrySet()) {
+				Map<String, String> values = fetchIpGroupKpiValues(scope.getKey(), ipGroup.getId());
+				if (values == null) {
+					complete = false;
+					values = Map.of();
+				}
+				for (IpGroupStatsProperty property : scope.getValue()) {
+					stats.put(groupName + Constant.HASH + property.getName(),
+							Util.getDefaultValueForNullData(values.get(property.getKpiId()), false));
+				}
+			}
+		}
+		return complete;
+	}
+
+	/**
+	 * Lists the IP Group entities configured on the device from {@link Constant#IP_GROUP_CALL_STATS_KPI_API},
+	 * with names and descriptions ({@code detailed=true}). Further pages are requested with
+	 * {@code after=<last index>} until the device returns no entries or no new index, or
+	 * {@link Constant#IP_GROUP_DISCOVERY_MAX_PAGES} pages have been read. Entries without an id are skipped.
+	 *
+	 * @return the IP Group entities in device order; empty if the device has none
+	 * @throws FailedLoginException    if a request fails due to authentication issues
+	 * @throws DataConversionException if a response body could not be deserialized
+	 * @throws IllegalStateException   if a request fails for any other reason
+	 */
+	private List<KpiItem> discoverIpGroups() throws FailedLoginException, DataConversionException {
+		List<KpiItem> ipGroups = new ArrayList<>();
+		Set<String> ipGroupIds = new LinkedHashSet<>();
+		String after = null;
+		for (int page = 0; page < Constant.IP_GROUP_DISCOVERY_MAX_PAGES; page++) {
+			UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(Constant.IP_GROUP_CALL_STATS_KPI_API)
+					.queryParam(Constant.DETAILED_PARAM, true);
+			if (after != null) {
+				uriBuilder.queryParam(Constant.AFTER_PARAM, after);
+			}
+			List<KpiItem> items = fetchKpiItems(uriBuilder.build().toUriString());
+			boolean newIpGroupFound = false;
+			for (KpiItem item : items) {
+				if (StringUtils.isNotNullOrEmpty(item.getId()) && ipGroupIds.add(item.getId())) {
+					ipGroups.add(item);
+					after = item.getId();
+					newIpGroupFound = true;
+				}
+			}
+			if (!newIpGroupFound) {
+				break;
+			}
+		}
+		return ipGroups;
+	}
+
+	/**
+	 * Reads every KPI of one IP Group from one device scope ({@code <scopeApi>/<ipGroupId>}).
+	 * A failed or malformed response is logged and yields {@code null}.
+	 *
+	 * @param scopeApi  the IP Group entity path of the device scope, e.g. {@link Constant#IP_GROUP_CALL_STATS_KPI_API}
+	 * @param ipGroupId the IP Group index
+	 * @return the KPI values keyed by KPI id; {@code null} if the request failed
+	 * @throws FailedLoginException if the request fails due to authentication issues
+	 */
+	private Map<String, String> fetchIpGroupKpiValues(String scopeApi, String ipGroupId) throws FailedLoginException {
+		String uri = scopeApi + Constant.SLASH + ipGroupId;
+		Map<String, String> values = new HashMap<>();
+		try {
+			for (KpiItem item : fetchKpiItems(uri)) {
+				if (item.getId() != null) {
+					values.put(item.getId(), item.getValue());
+				}
+			}
+		} catch (FailedLoginException e) {
+			throw e;
+		} catch (Exception e) {
+			this.logger.error("Failed to fetch the IP Group KPIs from %s".formatted(uri), e);
+			return null;
+		}
+		return values;
+	}
+
+	/**
+	 * Fetches a KPI node listing ({@code {"items":[...]}}) from {@code uri}.
+	 *
+	 * @param uri the API endpoint to call
+	 * @return the listed entries; empty if the device returned no content or no {@code items}
+	 * @throws FailedLoginException    if authentication fails
+	 * @throws DataConversionException if the response body could not be deserialized
+	 */
+	private List<KpiItem> fetchKpiItems(String uri) throws FailedLoginException, DataConversionException {
+		JsonNode node = fetchJsonNode(uri);
+		if (node == null) {
+			return List.of();
+		}
+		try {
+			KpiItemsResponse response = this.objectMapper.convertValue(node, KpiItemsResponse.class);
+			return response == null || response.getItems() == null ? List.of() : response.getItems();
+		} catch (IllegalArgumentException e) {
+			throw new DataConversionException(Constant.CONVERT_DATA_FAILED.formatted(KpiItemsResponse.class.getName()), e);
+		}
+	}
+
+	/**
+	 * Builds the statistics group name of an IP Group: {@code IPGroupStatistics_<index>_<name>}, or {@code IPGroupStatistics_<index>}
+	 * when the device returns no name. {@link Constant#HASH} characters in the name are replaced with
+	 * {@link Constant#UNDERSCORE}.
+	 *
+	 * @param ipGroup the IP Group entity
+	 * @return the statistics group name
+	 */
+	private String buildIpGroupName(KpiItem ipGroup) {
+		String groupName = Constant.IP_GROUP_STATISTICS_GROUP + Constant.UNDERSCORE + ipGroup.getId();
+		if (StringUtils.isNullOrEmpty(ipGroup.getName(), true)) {
+			return groupName;
+		}
+		return groupName + Constant.UNDERSCORE + ipGroup.getName().strip().replace(Constant.HASH, Constant.UNDERSCORE);
 	}
 
 	/**

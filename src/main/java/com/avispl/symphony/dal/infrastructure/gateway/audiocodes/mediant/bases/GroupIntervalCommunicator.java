@@ -324,4 +324,23 @@ public abstract class GroupIntervalCommunicator extends Communicator {
 	public void setSipRecStatisticsRequestInterval(String sipRecStatisticsRequestInterval) {
 		writeInterval("sipRecStatisticsRequestInterval", Constant.SIP_REC_STATISTICS_GROUP, sipRecStatisticsRequestInterval);
 	}
+
+	/**
+	 * Returns the request interval of the {@code IPGroupStatistics} property group.
+	 *
+	 * @return the interval in seconds, as a string
+	 */
+	public String getIpGroupStatisticsRequestInterval() {
+		return readInterval(Constant.IP_GROUP_STATISTICS_GROUP);
+	}
+
+	/**
+	 * Sets the request interval of the {@code IPGroupStatistics} property group, in seconds. The interval covers the
+	 * IP Group listing and the statistics of every IP Group.
+	 *
+	 * @param ipGroupStatisticsRequestInterval the interval in seconds, as a string
+	 */
+	public void setIpGroupStatisticsRequestInterval(String ipGroupStatisticsRequestInterval) {
+		writeInterval("ipGroupStatisticsRequestInterval", Constant.IP_GROUP_STATISTICS_GROUP, ipGroupStatisticsRequestInterval);
+	}
 }
