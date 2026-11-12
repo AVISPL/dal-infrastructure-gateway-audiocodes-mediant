@@ -29,7 +29,7 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.
  * @since 1.0.0
  */
 class AudioCodesMediantHistoricalPropertiesTest {
-	private static final String RATIO_PROPERTY = "AnswerSeizureRatio(%)";
+	private static final String RATIO_PROPERTY = "CurrentASR(%)";
 	private static final String JITTER_PROPERTY = "MediaJitterIn(ms)";
 	private static final String SESSIONS_PROPERTY = "ActiveSessions";
 	private static final String RATIO_KEY = "CallQualityStatistics" + Constant.HASH + RATIO_PROPERTY;
@@ -279,7 +279,7 @@ class AudioCodesMediantHistoricalPropertiesTest {
 	 */
 	@Test
 	void testSetHistoricalProperties_withAllNamesUnsupportedSelectsNothing() {
-		this.communicator.setHistoricalProperties("answerseizureratio(%), MEDIAJITTERIN(MS)");
+		this.communicator.setHistoricalProperties("currentasr(%), MEDIAJITTERIN(MS)");
 
 		Assertions.assertEquals("", this.communicator.getHistoricalProperties(),
 				"Every supplied name was unsupported, and there is no 'select everything' fallback");
@@ -292,13 +292,25 @@ class AudioCodesMediantHistoricalPropertiesTest {
 	 */
 	@Test
 	void testSetHistoricalProperties_withMissingOrWrongUnitSuffix() {
-		this.communicator.setHistoricalProperties("AnswerSeizureRatio");
+		this.communicator.setHistoricalProperties("CurrentASR");
 		Assertions.assertEquals("", this.communicator.getHistoricalProperties(),
 				"The unit suffix is part of the supported name");
 
 		this.communicator.setHistoricalProperties("MediaJitterIn(s)");
 		Assertions.assertEquals("", this.communicator.getHistoricalProperties(),
 				"A wrong unit suffix does not make a supported name");
+	}
+
+	/**
+	 * {@code AnswerSeizureRatio(%)} was renamed to {@code CurrentASR(%)} as a clean break, with no
+	 * deprecated alias: a configuration still holding the old name selects nothing, and the property
+	 * has to be re-selected under its new name.
+	 */
+	@Test
+	void testSetHistoricalProperties_withPreRenameNameIsUnsupported() {
+		this.communicator.setHistoricalProperties("AnswerSeizureRatio(%)");
+		Assertions.assertEquals("", this.communicator.getHistoricalProperties(),
+				"The pre-rename name is no longer a supported historical property");
 	}
 
 	/**
