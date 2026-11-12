@@ -12,6 +12,7 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.C
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallTrafficStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaDspStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MemoryStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.RegistrationStatsProperty;
 
 /**
@@ -61,6 +62,29 @@ public class Constant {
 	public static final String MEDIA_CLUSTER_STATS_KPI_API = "/kpi/current/media/clusterStats/global";
 	public static final String SBC_OTHER_STATS_KPI_API = "/kpi/current/sbc/otherStats/global";
 	public static final String SIP_REC_STATS_KPI_API = "/kpi/current/sbc/sipRecStats/global";
+	public static final String LICENSE_STATS_KPI_API = "/kpi/current/system/licenseStats/global";
+	//	Device-wide memory entity, and the entity lists of the per-CPU and per-partition system KPIs; an entity index
+	//	is appended to a list path (e.g. ".../cpu/0") to read every real-time KPI of that entity.
+	public static final String SYSTEM_STATS_KPI_API = "/kpi/current/system/systemStats/global";
+	public static final String CPU_STATS_KPI_API = "/kpi/current/system/cpuStats/cpu";
+	public static final String STORAGE_STATS_KPI_API = "/kpi/current/system/storageStats/partition";
+	//	History paths of the same entities; "/<kpiId>?interval=last" is appended (after the entity index for a
+	//	per-CPU or per-partition KPI) to read the value of the last completed 15-minute interval.
+	public static final String SYSTEM_STATS_HISTORY_API = "/kpi/history/system/systemStats/global";
+	public static final String CPU_STATS_HISTORY_API = "/kpi/history/system/cpuStats/cpu";
+	public static final String STORAGE_STATS_HISTORY_API = "/kpi/history/system/storageStats/partition";
+	//	Device-wide HA link entity and the Ethernet port entity list; a port index is appended to the list path
+	//	(e.g. ".../port/0") to read every real-time KPI of that port.
+	public static final String HA_STATS_KPI_API = "/kpi/current/network/haStats/global";
+	public static final String SIP_TLS_STATS_KPI_API = "/kpi/current/network/tlsStats/global";
+	public static final String PORT_STATS_KPI_API = "/kpi/current/network/portStats/port";
+	//	History paths of the same entities; "/<kpiId>?interval=last" is appended (after the port index for a
+	//	per-port KPI) to read the value of the last completed 15-minute interval.
+	public static final String HA_STATS_HISTORY_API = "/kpi/history/network/haStats/global";
+	public static final String SIP_TLS_STATS_HISTORY_API = "/kpi/history/network/tlsStats/global";
+	public static final String PORT_STATS_HISTORY_API = "/kpi/history/network/portStats/port";
+	public static final String INTERVAL_PARAM = "interval";
+	public static final String LAST_INTERVAL = "last";
 	//	Base paths for the device's IP Group KPI entities; the IP Group index is appended (e.g. ".../ipGroup/1")
 	//	to read every KPI of that IP Group. IP_GROUP_CALL_STATS_KPI_API on its own lists the IP Group entities.
 	public static final String IP_GROUP_CALL_STATS_KPI_API = "/kpi/current/sbc/callStats/ipGroup";
@@ -69,8 +93,8 @@ public class Constant {
 	public static final String IP_GROUP_SIP_REC_STATS_KPI_API = "/kpi/current/sbc/sipRecStats/ipGroup";
 	public static final String DETAILED_PARAM = "detailed";
 	public static final String AFTER_PARAM = "after";
-	//	Maximum number of IP Group listing pages requested in one discovery.
-	public static final int IP_GROUP_DISCOVERY_MAX_PAGES = 50;
+	//	Maximum number of KPI entity listing pages (IP Groups, CPUs, partitions) requested in one discovery.
+	public static final int KPI_ENTITY_DISCOVERY_MAX_PAGES = 50;
 	public static final String TEST_CALL_DIAL_API = "/sipTestCall/dial";
 	public static final String TEST_CALL_STATUS_API = "/sipTestCall/getStatus";
 	public static final String TEST_CALL_SHOW_API = "/sipTestCall/show";
@@ -101,6 +125,18 @@ public class Constant {
 	public static final String MEDIA_CLUSTER_STATISTICS_GROUP = "MediaClusterStatistics";
 	public static final String REGISTRATION_STATISTICS_GROUP = "RegistrationStatistics";
 	public static final String SIP_REC_STATISTICS_GROUP = "SIPRecStatistics";
+	public static final String LICENSE_STATISTICS_GROUP = "LicenseStatistics";
+	public static final String MEMORY_STATISTICS_GROUP = "MemoryStatistics";
+	//	Enable the per-CPU and per-partition statistics, reported as CPUStatistics_<index> and
+	//	StorageStatistics_<index> groups.
+	public static final String CPU_STATISTICS_GROUP = "CPUStatistics";
+	public static final String STORAGE_STATISTICS_GROUP = "StorageStatistics";
+	public static final String HA_STATISTICS_GROUP = "HAStatistics";
+	public static final String SIP_TLS_STATISTICS_GROUP = "SIPTLSStatistics";
+	//	Enables the per-port statistics, reported as EthernetPortStatistics_<index> groups.
+	public static final String ETHERNET_PORT_STATISTICS_GROUP = "EthernetPortStatistics";
+	//	Per-CPU, per-partition and per-port property holding the entity name reported by the device.
+	public static final String NAME = "Name";
 	//	Enables the per-IP-Group statistics, reported as one IPGroupStatistics_<index>_<name> group per IP Group.
 	public static final String IP_GROUP_STATISTICS_GROUP = "IPGroupStatistics";
 	//	Every value displayPropertyGroups is allowed to contain; anything else is unsupported and dropped.
@@ -119,6 +155,13 @@ public class Constant {
 			MEDIA_CLUSTER_STATISTICS_GROUP,
 			REGISTRATION_STATISTICS_GROUP,
 			SIP_REC_STATISTICS_GROUP,
+			LICENSE_STATISTICS_GROUP,
+			MEMORY_STATISTICS_GROUP,
+			CPU_STATISTICS_GROUP,
+			STORAGE_STATISTICS_GROUP,
+			HA_STATISTICS_GROUP,
+			SIP_TLS_STATISTICS_GROUP,
+			ETHERNET_PORT_STATISTICS_GROUP,
 			IP_GROUP_STATISTICS_GROUP,
 			NETWORK_GROUP,
 			ACTIVE_ALARM);
@@ -142,7 +185,8 @@ public class Constant {
 			MediaStatsProperty.MEDIA_BANDWIDTH_IN.getName(),
 			MediaStatsProperty.MEDIA_BANDWIDTH_OUT.getName(),
 			MediaDspStatsProperty.DSP_RESOURCE_CURRENT.getName(),
-			RegistrationStatsProperty.REGISTERED_USERS.getName());
+			RegistrationStatsProperty.REGISTERED_USERS.getName(),
+			MemoryStatsProperty.MEMORY_UTILIZATION.getName());
 
 	//	Per-group request interval, in seconds: how long a property group's data is reused before the group is requested
 	//	again. Only the groups with a setter in GroupIntervalCommunicator accept one.
