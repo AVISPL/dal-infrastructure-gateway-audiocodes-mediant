@@ -37,6 +37,7 @@ import com.avispl.symphony.api.dal.error.CommandFailureException;
 import com.avispl.symphony.api.dal.error.ResourceNotReachableException;
 import com.avispl.symphony.api.dal.monitor.Monitorable;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.GroupIntervalCommunicator;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.IntervalKpiProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.KpiProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Constant;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.DataConversionException;
@@ -55,12 +56,16 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.C
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallRoutingStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallTerminationStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallTrafficStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CpuStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.IpGroupStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.LicenseStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaClusterStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaDspStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MemoryStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.RegistrationStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.SipRecStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.StorageStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.Alarms;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.AlarmsResponse;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.KpiItem;
@@ -825,6 +830,144 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 				groupStats -> retrieveKpiGroup(groupStats, Constant.SBC_OTHER_STATS_KPI_API, Constant.REGISTRATION_STATISTICS_GROUP, RegistrationStatsProperty.values()));
 		retrieveGroup(stats, Constant.SIP_REC_STATISTICS_GROUP, now,
 				groupStats -> retrieveKpiGroup(groupStats, Constant.SIP_REC_STATS_KPI_API, Constant.SIP_REC_STATISTICS_GROUP, SipRecStatsProperty.values()));
+		retrieveGroup(stats, Constant.LICENSE_STATISTICS_GROUP, now,
+				groupStats -> retrieveKpiEntityGroup(groupStats, Constant.LICENSE_STATS_KPI_API, Constant.LICENSE_STATISTICS_GROUP, LicenseStatsProperty.values()));
+		retrieveGroup(stats, Constant.MEMORY_STATISTICS_GROUP, now,
+				groupStats -> retrieveIntervalKpiEntity(groupStats, Constant.MEMORY_STATISTICS_GROUP, Constant.SYSTEM_STATS_KPI_API,
+						Constant.SYSTEM_STATS_HISTORY_API, MemoryStatsProperty.values()));
+		retrieveGroup(stats, Constant.CPU_STATISTICS_GROUP, now,
+				groupStats -> retrieveIntervalKpiEntities(groupStats, Constant.CPU_STATISTICS_GROUP, Constant.CPU_STATS_KPI_API,
+						Constant.CPU_STATS_HISTORY_API, CpuStatsProperty.values()));
+		retrieveGroup(stats, Constant.STORAGE_STATISTICS_GROUP, now,
+				groupStats -> retrieveIntervalKpiEntities(groupStats, Constant.STORAGE_STATISTICS_GROUP, Constant.STORAGE_STATS_KPI_API,
+						Constant.STORAGE_STATS_HISTORY_API, StorageStatsProperty.values()));
+	}
+
+	/**
+	 * Retrieves the KPIs of one device KPI entity into the {@code statsGroupName} group: the real-time KPIs with a single
+	 * request to {@code currentApi}, which returns every real-time KPI value of the entity, and each last-interval
+	 * KPI ({@link IntervalKpiProperty#isLastInterval()}) with its own request to {@code <historyApi>/<kpiId>?interval=last}.
+	 * A KPI the device does not return, or one whose request fails, is reported as {@link Constant#NOT_AVAILABLE}.
+	 *
+	 * @param <T>            the {@link IntervalKpiProperty} enum type of the entity
+	 * @param stats          the map to populate with property display names as keys
+	 * @param statsGroupName the statistics group name prefixing the properties
+	 * @param currentApi     the real-time path of the entity, e.g. {@link Constant#SYSTEM_STATS_KPI_API}
+	 * @param historyApi     the history path of the entity, e.g. {@link Constant#SYSTEM_STATS_HISTORY_API}
+	 * @param properties     the KPI properties of the entity
+	 * @return {@code true} if every request succeeded; {@code false} otherwise
+	 * @throws FailedLoginException if a request fails due to authentication issues
+	 */
+	private <T extends Enum<T> & IntervalKpiProperty> boolean retrieveIntervalKpiEntity(Map<String, String> stats, String statsGroupName,
+			String currentApi, String historyApi, T[] properties) throws FailedLoginException {
+		Map<String, String> currentValues = fetchKpiEntityValues(currentApi);
+		boolean complete = currentValues != null;
+		for (T property : properties) {
+			String value;
+			if (!property.isLastInterval()) {
+				value = currentValues == null ? null : currentValues.get(property.getKpiId());
+			} else {
+				String uri = UriComponentsBuilder.fromUriString(historyApi + Constant.SLASH + property.getKpiId())
+						.queryParam(Constant.INTERVAL_PARAM, Constant.LAST_INTERVAL)
+						.build().toUriString();
+				try {
+					value = fetchLastIntervalValue(uri);
+				} catch (FailedLoginException e) {
+					throw e;
+				} catch (Exception e) {
+					this.logger.error("Failed to fetch the '%s' last-interval KPI from %s".formatted(property.getKpiId(), uri), e);
+					value = null;
+					complete = false;
+				}
+			}
+			stats.put(statsGroupName + Constant.HASH + property.getName(), Util.getDefaultValueForNullData(value, false));
+		}
+		return complete;
+	}
+
+	/**
+	 * Retrieves the KPIs of every entity listed at {@code currentListApi} (e.g. every CPU) into one
+	 * {@code <group>_<index>} statistics group per entity, with the device's name of the entity as
+	 * {@code <group>_<index>#Name} (see {@link #retrieveIntervalKpiEntity}). Whether {@code group} is enabled is checked
+	 * by the caller, {@link #retrieveGroup}. A failed listing is logged and no entity is reported.
+	 *
+	 * @param <T>            the {@link IntervalKpiProperty} enum type of the entities
+	 * @param stats          the map to populate with property display names as keys
+	 * @param group          the property group name, e.g. {@link Constant#CPU_STATISTICS_GROUP}
+	 * @param currentListApi the real-time entity list path, e.g. {@link Constant#CPU_STATS_KPI_API}
+	 * @param historyListApi the history path of the same entities, e.g. {@link Constant#CPU_STATS_HISTORY_API}
+	 * @param properties     the KPI properties of each entity
+	 * @return {@code true} if the listing and every request succeeded; {@code false} otherwise
+	 * @throws FailedLoginException if a request fails due to authentication issues
+	 */
+	private <T extends Enum<T> & IntervalKpiProperty> boolean retrieveIntervalKpiEntities(Map<String, String> stats, String group,
+			String currentListApi, String historyListApi, T[] properties) throws FailedLoginException {
+		List<KpiItem> entities;
+		try {
+			entities = discoverKpiEntities(currentListApi);
+		} catch (FailedLoginException e) {
+			throw e;
+		} catch (Exception e) {
+			this.logger.error("Failed to list the KPI entities from %s".formatted(currentListApi), e);
+			return false;
+		}
+		boolean complete = true;
+		for (KpiItem entity : entities) {
+			String statsGroupName = group + Constant.UNDERSCORE + entity.getId();
+			stats.put(statsGroupName + Constant.HASH + Constant.NAME, Util.getDefaultValueForNullData(entity.getName(), false));
+			complete &= retrieveIntervalKpiEntity(stats, statsGroupName, currentListApi + Constant.SLASH + entity.getId(),
+					historyListApi + Constant.SLASH + entity.getId(), properties);
+		}
+		return complete;
+	}
+
+	/**
+	 * Reads the value of a KPI for the last completed interval ({@code <historyApi>/<kpiId>?interval=last}). The value is
+	 * taken from the response's {@code value} field or, for a response listing intervals, from the {@code value} of
+	 * its first {@code items} entry.
+	 *
+	 * @param uri the history KPI path with its {@code interval} parameter
+	 * @return the value; {@code null} if the device returned no content or no value
+	 * @throws FailedLoginException  if authentication fails
+	 * @throws IllegalStateException if the request fails for any other reason
+	 */
+	private String fetchLastIntervalValue(String uri) throws FailedLoginException {
+		JsonNode node = fetchJsonNode(uri);
+		if (node == null) {
+			return null;
+		}
+		JsonNode value = node.get("value");
+		JsonNode items = node.get("items");
+		if (value == null && items != null && items.isArray() && !items.isEmpty()) {
+			value = items.get(0).get("value");
+		}
+		return value == null || value.isNull() ? null : value.asText();
+	}
+
+	/**
+	 * Retrieves every {@code property} belonging to {@code groupName} with a single request to the KPI entity
+	 * {@code entityApi}, which returns every KPI value of that entity, populating {@code stats} with a
+	 * {@code <groupName>#<PropertyName>} entry for each. Whether the group is enabled is checked by the caller,
+	 * {@link #retrieveGroup}. A KPI the device does not return, or every KPI when the request fails, is reported
+	 * as {@link Constant#NOT_AVAILABLE}.
+	 *
+	 * @param <T>        the {@link KpiProperty} enum type for this group
+	 * @param stats      the map to populate with property display names as keys
+	 * @param entityApi  the device KPI entity backing this group, e.g. {@link Constant#LICENSE_STATS_KPI_API}
+	 * @param groupName  the group name prefixing these properties
+	 * @param properties the KPI properties belonging to this group
+	 * @return {@code true} if the request succeeded; {@code false} if it failed, so a cached group is requested
+	 * again at the next cycle
+	 * @throws FailedLoginException if the request fails due to authentication issues
+	 */
+	private <T extends Enum<T> & KpiProperty> boolean retrieveKpiEntityGroup(Map<String, String> stats, String entityApi, String groupName, T[] properties)
+			throws FailedLoginException {
+		Map<String, String> values = fetchKpiEntityValues(entityApi);
+		for (T property : properties) {
+			String value = values == null ? null : values.get(property.getKpiId());
+			stats.put(groupName + Constant.HASH + property.getName(), Util.getDefaultValueForNullData(value, false));
+		}
+		return values != null;
 	}
 
 	/**
@@ -879,7 +1022,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	 * {@code stats} with an {@code IPGroupStatistics_<index>_<name>#<PropertyName>} entry per KPI and IP Group. Whether
 	 * {@link Constant#IP_GROUP_STATISTICS_GROUP} is enabled is checked by the caller, {@link #retrieveGroup}.
 	 * <p>
-	 * IP Groups are listed by {@link #discoverIpGroups()} each time this runs; a failed listing is logged and no IP
+	 * IP Groups are listed by {@link #discoverKpiEntities(String)} each time this runs; a failed listing is logged and no IP
 	 * Group statistics are reported. For each IP Group, every device scope used by {@link IpGroupStatsProperty} is
 	 * read with one request returning all KPIs of that scope. A KPI the device does not return, or one whose scope
 	 * request fails, is reported as {@link Constant#NOT_AVAILABLE}.
@@ -894,7 +1037,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 				.collect(Collectors.groupingBy(IpGroupStatsProperty::getScopeApi, LinkedHashMap::new, Collectors.toList()));
 		List<KpiItem> ipGroups;
 		try {
-			ipGroups = discoverIpGroups();
+			ipGroups = discoverKpiEntities(Constant.IP_GROUP_CALL_STATS_KPI_API);
 		} catch (FailedLoginException e) {
 			throw e;
 		} catch (Exception e) {
@@ -920,40 +1063,41 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	}
 
 	/**
-	 * Lists the IP Group entities configured on the device from {@link Constant#IP_GROUP_CALL_STATS_KPI_API},
-	 * with names and descriptions ({@code detailed=true}). Further pages are requested with
-	 * {@code after=<last index>} until the device returns no entries or no new index, or
-	 * {@link Constant#IP_GROUP_DISCOVERY_MAX_PAGES} pages have been read. Entries without an id are skipped.
+	 * Lists the entities of a KPI group from {@code listApi} (e.g. the IP Groups at
+	 * {@link Constant#IP_GROUP_CALL_STATS_KPI_API}), with names and descriptions ({@code detailed=true}). Further
+	 * pages are requested with {@code after=<last index>} until the device returns no entries or no new index, or
+	 * {@link Constant#KPI_ENTITY_DISCOVERY_MAX_PAGES} pages have been read. Entries without an id are skipped.
 	 *
-	 * @return the IP Group entities in device order; empty if the device has none
+	 * @param listApi the entity list path
+	 * @return the entities in device order; empty if the device has none
 	 * @throws FailedLoginException    if a request fails due to authentication issues
 	 * @throws DataConversionException if a response body could not be deserialized
 	 * @throws IllegalStateException   if a request fails for any other reason
 	 */
-	private List<KpiItem> discoverIpGroups() throws FailedLoginException, DataConversionException {
-		List<KpiItem> ipGroups = new ArrayList<>();
-		Set<String> ipGroupIds = new LinkedHashSet<>();
+	private List<KpiItem> discoverKpiEntities(String listApi) throws FailedLoginException, DataConversionException {
+		List<KpiItem> entities = new ArrayList<>();
+		Set<String> entityIds = new LinkedHashSet<>();
 		String after = null;
-		for (int page = 0; page < Constant.IP_GROUP_DISCOVERY_MAX_PAGES; page++) {
-			UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(Constant.IP_GROUP_CALL_STATS_KPI_API)
+		for (int page = 0; page < Constant.KPI_ENTITY_DISCOVERY_MAX_PAGES; page++) {
+			UriComponentsBuilder uriBuilder = UriComponentsBuilder.fromUriString(listApi)
 					.queryParam(Constant.DETAILED_PARAM, true);
 			if (after != null) {
 				uriBuilder.queryParam(Constant.AFTER_PARAM, after);
 			}
 			List<KpiItem> items = fetchKpiItems(uriBuilder.build().toUriString());
-			boolean newIpGroupFound = false;
+			boolean newEntityFound = false;
 			for (KpiItem item : items) {
-				if (StringUtils.isNotNullOrEmpty(item.getId()) && ipGroupIds.add(item.getId())) {
-					ipGroups.add(item);
+				if (StringUtils.isNotNullOrEmpty(item.getId()) && entityIds.add(item.getId())) {
+					entities.add(item);
 					after = item.getId();
-					newIpGroupFound = true;
+					newEntityFound = true;
 				}
 			}
-			if (!newIpGroupFound) {
+			if (!newEntityFound) {
 				break;
 			}
 		}
-		return ipGroups;
+		return entities;
 	}
 
 	/**
@@ -966,7 +1110,19 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	 * @throws FailedLoginException if the request fails due to authentication issues
 	 */
 	private Map<String, String> fetchIpGroupKpiValues(String scopeApi, String ipGroupId) throws FailedLoginException {
-		String uri = scopeApi + Constant.SLASH + ipGroupId;
+		return fetchKpiEntityValues(scopeApi + Constant.SLASH + ipGroupId);
+	}
+
+	/**
+	 * Reads every KPI value of one KPI entity (e.g. {@code /kpi/current/system/licenseStats/global}) with a single
+	 * request. A no-content response yields an empty map; a failed or malformed response is logged and yields
+	 * {@code null}.
+	 *
+	 * @param uri the KPI entity path
+	 * @return the KPI values keyed by KPI id; {@code null} if the request failed
+	 * @throws FailedLoginException if the request fails due to authentication issues
+	 */
+	private Map<String, String> fetchKpiEntityValues(String uri) throws FailedLoginException {
 		Map<String, String> values = new HashMap<>();
 		try {
 			for (KpiItem item : fetchKpiItems(uri)) {
@@ -977,7 +1133,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 		} catch (FailedLoginException e) {
 			throw e;
 		} catch (Exception e) {
-			this.logger.error("Failed to fetch the IP Group KPIs from %s".formatted(uri), e);
+			this.logger.error("Failed to fetch the KPIs from %s".formatted(uri), e);
 			return null;
 		}
 		return values;

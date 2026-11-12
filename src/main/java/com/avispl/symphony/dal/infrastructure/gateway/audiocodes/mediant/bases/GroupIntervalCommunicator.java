@@ -326,6 +326,80 @@ public abstract class GroupIntervalCommunicator extends Communicator {
 	}
 
 	/**
+	 * Returns the request interval of the {@code LicenseStatistics} property group.
+	 *
+	 * @return the interval in seconds, as a string
+	 */
+	public String getLicenseStatisticsRequestInterval() {
+		return readInterval(Constant.LICENSE_STATISTICS_GROUP);
+	}
+
+	/**
+	 * Sets the request interval of the {@code LicenseStatistics} property group, in seconds.
+	 *
+	 * @param licenseStatisticsRequestInterval the interval in seconds, as a string
+	 */
+	public void setLicenseStatisticsRequestInterval(String licenseStatisticsRequestInterval) {
+		writeInterval("licenseStatisticsRequestInterval", Constant.LICENSE_STATISTICS_GROUP, licenseStatisticsRequestInterval);
+	}
+
+	/**
+	 * Returns the request interval of the {@code MemoryStatistics} property group.
+	 *
+	 * @return the interval in seconds, as a string
+	 */
+	public String getMemoryStatisticsRequestInterval() {
+		return readInterval(Constant.MEMORY_STATISTICS_GROUP);
+	}
+
+	/**
+	 * Sets the request interval of the {@code MemoryStatistics} property group, in seconds.
+	 *
+	 * @param memoryStatisticsRequestInterval the interval in seconds, as a string
+	 */
+	public void setMemoryStatisticsRequestInterval(String memoryStatisticsRequestInterval) {
+		writeInterval("memoryStatisticsRequestInterval", Constant.MEMORY_STATISTICS_GROUP, memoryStatisticsRequestInterval);
+	}
+
+	/**
+	 * Returns the request interval of the {@code CPUStatistics} property group.
+	 *
+	 * @return the interval in seconds, as a string
+	 */
+	public String getCpuStatisticsRequestInterval() {
+		return readInterval(Constant.CPU_STATISTICS_GROUP);
+	}
+
+	/**
+	 * Sets the request interval of the {@code CPUStatistics} property group, in seconds. The interval covers the CPU listing
+	 * and the statistics of every CPU.
+	 *
+	 * @param cpuStatisticsRequestInterval the interval in seconds, as a string
+	 */
+	public void setCpuStatisticsRequestInterval(String cpuStatisticsRequestInterval) {
+		writeInterval("cpuStatisticsRequestInterval", Constant.CPU_STATISTICS_GROUP, cpuStatisticsRequestInterval);
+	}
+
+	/**
+	 * Returns the request interval of the {@code StorageStatistics} property group.
+	 *
+	 * @return the interval in seconds, as a string
+	 */
+	public String getStorageStatisticsRequestInterval() {
+		return readInterval(Constant.STORAGE_STATISTICS_GROUP);
+	}
+
+	/**
+	 * Sets the request interval of the {@code StorageStatistics} property group, in seconds. The interval covers the partition
+	 * listing and the statistics of every partition.
+	 *
+	 * @param storageStatisticsRequestInterval the interval in seconds, as a string
+	 */
+	public void setStorageStatisticsRequestInterval(String storageStatisticsRequestInterval) {
+		writeInterval("storageStatisticsRequestInterval", Constant.STORAGE_STATISTICS_GROUP, storageStatisticsRequestInterval);
+	}
+
+	/**
 	 * Returns the request interval of the {@code IPGroupStatistics} property group.
 	 *
 	 * @return the interval in seconds, as a string

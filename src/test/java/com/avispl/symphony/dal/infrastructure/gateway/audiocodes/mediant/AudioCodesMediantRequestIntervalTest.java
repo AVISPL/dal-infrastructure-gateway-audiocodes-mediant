@@ -422,7 +422,7 @@ class AudioCodesMediantRequestIntervalTest {
 	}
 
 	/**
-	 * Every one of the 14 interval properties maps to its own group: setting one caches that group only.
+	 * Every one of the 18 interval properties maps to its own group: setting one caches that group only.
 	 */
 	@Test
 	void testEachIntervalPropertyCachesOnlyItsGroup() throws Exception {
