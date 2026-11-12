@@ -3,8 +3,14 @@
  */
 package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common;
 
+import java.util.List;
+import java.util.Map;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.Alarms;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Unit tests for {@link Util}. Unlike {@code AudioCodesMediantTest}, these need no device or
@@ -97,5 +103,33 @@ class UtilTest {
 		Assertions.assertFalse(Util.isNumeric("Infinity"));
 		Assertions.assertFalse(Util.isNumeric("true"));
 		Assertions.assertTrue(Util.isNumeric("4294967296"));
+	}
+
+	/**
+	 * Pins the alarm property names agreed in SYAL-3997: the summary group keeps its {@code ActiveAlarms}
+	 * name and {@code Count}, its source list is {@code Source}, and each alarm is reported under
+	 * {@code ActiveAlarm_<id>} with a {@code Timestamp} taken from the device's {@code date} field.
+	 */
+	@Test
+	void testGenerateActiveAlarmsProperties_usesRenamedKeys() throws Exception {
+		Alarms alarm = new ObjectMapper().readValue(
+				"{\"id\":7,\"description\":\"Fan\",\"severity\":\"major\",\"source\":\"Board#1\",\"date\":\"2026-11-11T10:00:00Z\"}",
+				Alarms.class);
+
+		Map<String, String> properties = Util.generateActiveAlarmsProperties(List.of(alarm));
+
+		Assertions.assertEquals("1", properties.get("ActiveAlarms#Count"));
+		Assertions.assertTrue(properties.containsKey("ActiveAlarms#Severity"));
+		Assertions.assertTrue(properties.containsKey("ActiveAlarms#Source"));
+		Assertions.assertEquals("2026-11-11T10:00:00Z", properties.get("ActiveAlarm_7#Timestamp"));
+		Assertions.assertTrue(properties.containsKey("ActiveAlarm_7#Description"));
+		Assertions.assertTrue(properties.containsKey("ActiveAlarm_7#Severity"));
+		Assertions.assertTrue(properties.containsKey("ActiveAlarm_7#Source"));
+
+		Assertions.assertFalse(properties.containsKey("ActiveAlarms#Sources"));
+		Assertions.assertTrue(properties.keySet().stream().noneMatch(key -> key.startsWith("ActiveAlarms_")),
+				"Per-alarm groups no longer use the ActiveAlarms_ prefix");
+		Assertions.assertTrue(properties.keySet().stream().noneMatch(key -> key.endsWith("#Date")),
+				"The per-alarm Date property is now Timestamp");
 	}
 }

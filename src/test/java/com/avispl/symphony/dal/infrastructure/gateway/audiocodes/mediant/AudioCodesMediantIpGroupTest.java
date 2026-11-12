@@ -87,16 +87,16 @@ class AudioCodesMediantIpGroupTest {
 
 		Assertions.assertTrue(stats.keySet().stream().noneMatch(key -> key.startsWith(Constant.IP_GROUP_STATISTICS_GROUP + Constant.UNDERSCORE)),
 				"Expected no IP Group properties when " + Constant.IP_GROUP_STATISTICS_GROUP + " is not displayed");
-		Assertions.assertTrue(stats.containsKey(Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + "AnswerSeizureRatio(%)"));
+		Assertions.assertTrue(stats.containsKey(Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + "CurrentASR(%)"));
 	}
 
 	@Test
 	void testGetMultipleStatistics_ipGroupPropertiesAreNotHistorical() throws Exception {
-		this.communicator.setHistoricalProperties("AnswerSeizureRatio(%)");
+		this.communicator.setHistoricalProperties("CurrentASR(%)");
 		var statistics = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
 		Map<String, String> dynamicStats = statistics.getDynamicStatistics();
 
-		Assertions.assertTrue(dynamicStats.containsKey(Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + "AnswerSeizureRatio(%)"));
+		Assertions.assertTrue(dynamicStats.containsKey(Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + "CurrentASR(%)"));
 		Assertions.assertTrue(dynamicStats.keySet().stream().noneMatch(key -> key.startsWith(Constant.IP_GROUP_STATISTICS_GROUP + Constant.UNDERSCORE)));
 		Assertions.assertEquals("94", statistics.getStatistics().get("IPGroupStatistics_3_Teams#AnswerSeizureRatio(%)"));
 	}
