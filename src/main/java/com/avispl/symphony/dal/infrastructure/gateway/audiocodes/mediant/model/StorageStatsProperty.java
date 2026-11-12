@@ -20,11 +20,11 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum StorageStatsProperty implements IntervalKpiProperty {
 	STORAGE_UTILIZATION("StorageUtilization(%)", "storageUtilization", false),
-	STORAGE_UTILIZATION_AVG("StorageUtilizationAvg(%)", "storageUtilizationAvg", true),
-	STORAGE_UTILIZATION_MAX("StorageUtilizationMax(%)", "storageUtilizationMax", true),
+	STORAGE_AVERAGE_UTILIZATION("StorageAverageUtilization(%)", "storageUtilizationAvg", true),
+	STORAGE_MAXIMUM_UTILIZATION("StorageMaximumUtilization(%)", "storageUtilizationMax", true),
 	STORAGE_USAGE("StorageUsage(KB)", "storageUsage", false),
-	STORAGE_USAGE_AVG("StorageUsageAvg(KB)", "storageUsageAvg", true),
-	STORAGE_USAGE_MAX("StorageUsageMax(KB)", "storageUsageMax", true);
+	STORAGE_AVERAGE_USAGE("StorageAverageUsage(KB)", "storageUsageAvg", true),
+	STORAGE_MAXIMUM_USAGE("StorageMaximumUsage(KB)", "storageUsageMax", true);
 
 	private final String name;
 	private final String kpiId;

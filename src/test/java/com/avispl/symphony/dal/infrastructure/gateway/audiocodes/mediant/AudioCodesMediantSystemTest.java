@@ -59,13 +59,13 @@ class AudioCodesMediantSystemTest {
 	void testGetMultipleStatistics_reportsMemoryEveryCpuAndEveryPartition() throws Exception {
 		Map<String, String> stats = this.pollStatistics();
 
-		Assertions.assertEquals(Set.of("MemoryUtilization(%)", "MemoryUtilizationAvg(%)", "MemoryUtilizationMax(%)"),
+		Assertions.assertEquals(Set.of("MemoryUtilization(%)", "MemoryAverageUtilization(%)", "MemoryMaximumUtilization(%)"),
 				this.propertiesOf(stats, Constant.MEMORY_STATISTICS_GROUP));
-		Set<String> cpuProperties = Set.of(Constant.NAME, "CPUUtilization(%)", "CPUUtilizationAvg(%)", "CPUUtilizationMax(%)");
+		Set<String> cpuProperties = Set.of(Constant.NAME, "CPUUtilization(%)", "CPUAverageUtilization(%)", "CPUMaximumUtilization(%)");
 		Assertions.assertEquals(cpuProperties, this.propertiesOf(stats, Constant.CPU_STATISTICS_GROUP + "_0"));
 		Assertions.assertEquals(cpuProperties, this.propertiesOf(stats, Constant.CPU_STATISTICS_GROUP + "_1"));
-		Set<String> storageProperties = Set.of(Constant.NAME, "StorageUtilization(%)", "StorageUtilizationAvg(%)", "StorageUtilizationMax(%)",
-				"StorageUsage(KB)", "StorageUsageAvg(KB)", "StorageUsageMax(KB)");
+		Set<String> storageProperties = Set.of(Constant.NAME, "StorageUtilization(%)", "StorageAverageUtilization(%)", "StorageMaximumUtilization(%)",
+				"StorageUsage(KB)", "StorageAverageUsage(KB)", "StorageMaximumUsage(KB)");
 		Assertions.assertEquals(storageProperties, this.propertiesOf(stats, Constant.STORAGE_STATISTICS_GROUP + "_0"));
 		Assertions.assertEquals(storageProperties, this.propertiesOf(stats, Constant.STORAGE_STATISTICS_GROUP + "_1"));
 	}
@@ -75,17 +75,17 @@ class AudioCodesMediantSystemTest {
 		Map<String, String> stats = this.pollStatistics();
 
 		Assertions.assertEquals("48", stats.get(MEMORY + "MemoryUtilization(%)"));
-		Assertions.assertEquals("45", stats.get(MEMORY + "MemoryUtilizationAvg(%)"));
-		Assertions.assertEquals("71", stats.get(MEMORY + "MemoryUtilizationMax(%)"));
+		Assertions.assertEquals("45", stats.get(MEMORY + "MemoryAverageUtilization(%)"));
+		Assertions.assertEquals("71", stats.get(MEMORY + "MemoryMaximumUtilization(%)"));
 		Assertions.assertEquals("CPU 0", stats.get(CPU_0 + Constant.NAME));
 		Assertions.assertEquals("23", stats.get(CPU_0 + "CPUUtilization(%)"));
-		Assertions.assertEquals("20", stats.get(CPU_0 + "CPUUtilizationAvg(%)"));
-		Assertions.assertEquals("64", stats.get(CPU_0 + "CPUUtilizationMax(%)"));
-		Assertions.assertEquals("88", stats.get(Constant.CPU_STATISTICS_GROUP + "_1" + Constant.HASH + "CPUUtilizationMax(%)"));
+		Assertions.assertEquals("20", stats.get(CPU_0 + "CPUAverageUtilization(%)"));
+		Assertions.assertEquals("64", stats.get(CPU_0 + "CPUMaximumUtilization(%)"));
+		Assertions.assertEquals("88", stats.get(Constant.CPU_STATISTICS_GROUP + "_1" + Constant.HASH + "CPUMaximumUtilization(%)"));
 		Assertions.assertEquals("Partition 0", stats.get(STORAGE_0 + Constant.NAME));
 		Assertions.assertEquals("35", stats.get(STORAGE_0 + "StorageUtilization(%)"));
-		Assertions.assertEquals("1440000", stats.get(STORAGE_0 + "StorageUsageAvg(KB)"));
-		Assertions.assertEquals("1460000", stats.get(STORAGE_0 + "StorageUsageMax(KB)"));
+		Assertions.assertEquals("1440000", stats.get(STORAGE_0 + "StorageAverageUsage(KB)"));
+		Assertions.assertEquals("1460000", stats.get(STORAGE_0 + "StorageMaximumUsage(KB)"));
 		Assertions.assertEquals("820000", stats.get(Constant.STORAGE_STATISTICS_GROUP + "_1" + Constant.HASH + "StorageUsage(KB)"));
 	}
 
@@ -110,11 +110,11 @@ class AudioCodesMediantSystemTest {
 
 	@Test
 	void testGetMultipleStatistics_lastIntervalValuesRequestedEveryPollWithoutInterval() throws Exception {
-		Assertions.assertEquals("64", this.pollStatistics().get(CPU_0 + "CPUUtilizationMax(%)"));
+		Assertions.assertEquals("64", this.pollStatistics().get(CPU_0 + "CPUMaximumUtilization(%)"));
 		this.sendToSimulator("PUT", "/state", "{\"cpu0UtilizationMax\":99}");
 		Map<String, String> secondPoll = this.pollStatistics();
 
-		Assertions.assertEquals("99", secondPoll.get(CPU_0 + "CPUUtilizationMax(%)"));
+		Assertions.assertEquals("99", secondPoll.get(CPU_0 + "CPUMaximumUtilization(%)"));
 		Assertions.assertFalse(secondPoll.containsKey(CPU_DATA_RETRIEVED_TIME));
 	}
 

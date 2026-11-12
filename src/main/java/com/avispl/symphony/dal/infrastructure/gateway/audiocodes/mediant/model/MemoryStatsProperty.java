@@ -19,8 +19,8 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum MemoryStatsProperty implements IntervalKpiProperty {
 	MEMORY_UTILIZATION("MemoryUtilization(%)", "memoryUtilization", false),
-	MEMORY_UTILIZATION_AVG("MemoryUtilizationAvg(%)", "memoryUtilizationAvg", true),
-	MEMORY_UTILIZATION_MAX("MemoryUtilizationMax(%)", "memoryUtilizationMax", true);
+	MEMORY_AVERAGE_UTILIZATION("MemoryAverageUtilization(%)", "memoryUtilizationAvg", true),
+	MEMORY_MAXIMUM_UTILIZATION("MemoryMaximumUtilization(%)", "memoryUtilizationMax", true);
 
 	private final String name;
 	private final String kpiId;

@@ -20,8 +20,8 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum CpuStatsProperty implements IntervalKpiProperty {
 	CPU_UTILIZATION("CPUUtilization(%)", "cpuUtilization", false),
-	CPU_UTILIZATION_AVG("CPUUtilizationAvg(%)", "cpuUtilizationAvg", true),
-	CPU_UTILIZATION_MAX("CPUUtilizationMax(%)", "cpuUtilizationMax", true);
+	CPU_AVERAGE_UTILIZATION("CPUAverageUtilization(%)", "cpuUtilizationAvg", true),
+	CPU_MAXIMUM_UTILIZATION("CPUMaximumUtilization(%)", "cpuUtilizationMax", true);
 
 	private final String name;
 	private final String kpiId;
