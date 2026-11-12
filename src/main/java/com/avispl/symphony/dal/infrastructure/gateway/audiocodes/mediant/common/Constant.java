@@ -73,6 +73,16 @@ public class Constant {
 	public static final String SYSTEM_STATS_HISTORY_API = "/kpi/history/system/systemStats/global";
 	public static final String CPU_STATS_HISTORY_API = "/kpi/history/system/cpuStats/cpu";
 	public static final String STORAGE_STATS_HISTORY_API = "/kpi/history/system/storageStats/partition";
+	//	Device-wide HA link entity and the Ethernet port entity list; a port index is appended to the list path
+	//	(e.g. ".../port/0") to read every real-time KPI of that port.
+	public static final String HA_STATS_KPI_API = "/kpi/current/network/haStats/global";
+	public static final String SIP_TLS_STATS_KPI_API = "/kpi/current/network/tlsStats/global";
+	public static final String PORT_STATS_KPI_API = "/kpi/current/network/portStats/port";
+	//	History paths of the same entities; "/<kpiId>?interval=last" is appended (after the port index for a
+	//	per-port KPI) to read the value of the last completed 15-minute interval.
+	public static final String HA_STATS_HISTORY_API = "/kpi/history/network/haStats/global";
+	public static final String SIP_TLS_STATS_HISTORY_API = "/kpi/history/network/tlsStats/global";
+	public static final String PORT_STATS_HISTORY_API = "/kpi/history/network/portStats/port";
 	public static final String INTERVAL_PARAM = "interval";
 	public static final String LAST_INTERVAL = "last";
 	//	Base paths for the device's IP Group KPI entities; the IP Group index is appended (e.g. ".../ipGroup/1")
@@ -121,7 +131,11 @@ public class Constant {
 	//	StorageStatistics_<index> groups.
 	public static final String CPU_STATISTICS_GROUP = "CPUStatistics";
 	public static final String STORAGE_STATISTICS_GROUP = "StorageStatistics";
-	//	Per-CPU and per-partition property holding the entity name reported by the device.
+	public static final String HA_STATISTICS_GROUP = "HAStatistics";
+	public static final String SIP_TLS_STATISTICS_GROUP = "SIPTLSStatistics";
+	//	Enables the per-port statistics, reported as EthernetPortStatistics_<index> groups.
+	public static final String ETHERNET_PORT_STATISTICS_GROUP = "EthernetPortStatistics";
+	//	Per-CPU, per-partition and per-port property holding the entity name reported by the device.
 	public static final String NAME = "Name";
 	//	Enables the per-IP-Group statistics, reported as one IPGroupStatistics_<index>_<name> group per IP Group.
 	public static final String IP_GROUP_STATISTICS_GROUP = "IPGroupStatistics";
@@ -145,6 +159,9 @@ public class Constant {
 			MEMORY_STATISTICS_GROUP,
 			CPU_STATISTICS_GROUP,
 			STORAGE_STATISTICS_GROUP,
+			HA_STATISTICS_GROUP,
+			SIP_TLS_STATISTICS_GROUP,
+			ETHERNET_PORT_STATISTICS_GROUP,
 			IP_GROUP_STATISTICS_GROUP,
 			NETWORK_GROUP,
 			ACTIVE_ALARM);

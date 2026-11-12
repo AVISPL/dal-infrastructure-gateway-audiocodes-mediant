@@ -57,6 +57,8 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.C
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallTerminationStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CallTrafficStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.CpuStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.EthernetPortStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.HaStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.IpGroupStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.LicenseStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MediaClusterStatsProperty;
@@ -65,6 +67,7 @@ import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.M
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.MemoryStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.RegistrationStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.SipRecStatsProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.SipTlsStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.StorageStatsProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.Alarms;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model.dto.AlarmsResponse;
@@ -841,13 +844,23 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 		retrieveGroup(stats, Constant.STORAGE_STATISTICS_GROUP, now,
 				groupStats -> retrieveIntervalKpiEntities(groupStats, Constant.STORAGE_STATISTICS_GROUP, Constant.STORAGE_STATS_KPI_API,
 						Constant.STORAGE_STATS_HISTORY_API, StorageStatsProperty.values()));
+		retrieveGroup(stats, Constant.HA_STATISTICS_GROUP, now,
+				groupStats -> retrieveIntervalKpiEntity(groupStats, Constant.HA_STATISTICS_GROUP, Constant.HA_STATS_KPI_API,
+						Constant.HA_STATS_HISTORY_API, HaStatsProperty.values()));
+		retrieveGroup(stats, Constant.SIP_TLS_STATISTICS_GROUP, now,
+				groupStats -> retrieveIntervalKpiEntity(groupStats, Constant.SIP_TLS_STATISTICS_GROUP, Constant.SIP_TLS_STATS_KPI_API,
+						Constant.SIP_TLS_STATS_HISTORY_API, SipTlsStatsProperty.values()));
+		retrieveGroup(stats, Constant.ETHERNET_PORT_STATISTICS_GROUP, now,
+				groupStats -> retrieveIntervalKpiEntities(groupStats, Constant.ETHERNET_PORT_STATISTICS_GROUP, Constant.PORT_STATS_KPI_API,
+						Constant.PORT_STATS_HISTORY_API, EthernetPortStatsProperty.values()));
 	}
 
 	/**
 	 * Retrieves the KPIs of one device KPI entity into the {@code statsGroupName} group: the real-time KPIs with a single
 	 * request to {@code currentApi}, which returns every real-time KPI value of the entity, and each last-interval
 	 * KPI ({@link IntervalKpiProperty#isLastInterval()}) with its own request to {@code <historyApi>/<kpiId>?interval=last}.
-	 * A KPI the device does not return, or one whose request fails, is reported as {@link Constant#NOT_AVAILABLE}.
+	 * Each value is displayed as converted by {@link IntervalKpiProperty#convertValue(String)}. A KPI the device does
+	 * not return, or one whose request fails, is reported as {@link Constant#NOT_AVAILABLE}.
 	 *
 	 * @param <T>            the {@link IntervalKpiProperty} enum type of the entity
 	 * @param stats          the map to populate with property display names as keys
@@ -880,7 +893,8 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 					complete = false;
 				}
 			}
-			stats.put(statsGroupName + Constant.HASH + property.getName(), Util.getDefaultValueForNullData(value, false));
+			String displayValue = value == null ? null : property.convertValue(value);
+			stats.put(statsGroupName + Constant.HASH + property.getName(), Util.getDefaultValueForNullData(displayValue, false));
 		}
 		return complete;
 	}

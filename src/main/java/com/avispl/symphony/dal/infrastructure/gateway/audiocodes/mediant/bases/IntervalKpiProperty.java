@@ -16,4 +16,14 @@ public interface IntervalKpiProperty extends KpiProperty {
 	 * {@code false} if it is a real-time value
 	 */
 	boolean isLastInterval();
+
+	/**
+	 * Converts a value reported by the device to the value displayed for the property.
+	 *
+	 * @param value the device value, never {@code null}
+	 * @return the displayed value; {@code value} unchanged by default
+	 */
+	default String convertValue(String value) {
+		return value;
+	}
 }
