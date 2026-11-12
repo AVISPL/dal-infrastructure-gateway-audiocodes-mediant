@@ -20,6 +20,6 @@ public enum AlarmProperty implements BaseProperty {
     DESCRIPTION("Description"),
     SEVERITY("Severity"),
     SOURCE("Source"),
-    DATE("Date");
+    TIMESTAMP("Timestamp");
     private final String name;
 }

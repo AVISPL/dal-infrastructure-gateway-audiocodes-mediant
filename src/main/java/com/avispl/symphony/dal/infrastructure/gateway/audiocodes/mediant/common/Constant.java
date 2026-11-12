@@ -94,7 +94,9 @@ public class Constant {
 	//	ActiveAlarms summary group properties
 	public static final String COUNT = "Count";
 	public static final String SEVERITY = "Severity";
-	public static final String SOURCES = "Sources";
+	public static final String SOURCE = "Source";
+	//	Prefix of each per-alarm group, ActiveAlarm_<id>; distinct from the ActiveAlarms summary group name (ACTIVE_ALARM)
+	public static final String ACTIVE_ALARM_ITEM_PREFIX = "ActiveAlarm";
 
 	//	Groups
 	public static final String CALL_DIAGNOSTICS_GROUP = "CallDiagnostics";
@@ -151,7 +153,7 @@ public class Constant {
 	//	Deliberately a subset of what the adapter emits - only the KPIs that make sense as a graphed time
 	//	series - and sourced from the property enums so the names cannot drift from the emitted keys.
 	public static final Set<String> SUPPORTED_HISTORICAL_PROPERTIES = Set.of(
-			CallQualityStatsProperty.ANSWER_SEIZURE_RATIO.getName(),
+			CallQualityStatsProperty.CURRENT_ASR.getName(),
 			CallQualityStatsProperty.NETWORK_EFFECTIVENESS_RATIO.getName(),
 			CallQualityStatsProperty.FAILED_CALLS_IN_RATIO.getName(),
 			CallQualityStatsProperty.FAILED_CALLS_OUT_RATIO.getName(),

@@ -162,7 +162,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 
 	/**
 	 * Property names - the {@code <PropertyName>} portion of a statistics key, with no group prefix but
-	 * the unit suffix included (e.g. {@code AnswerSeizureRatio(%)}, {@code MediaJitterIn(ms)}) - to
+	 * the unit suffix included (e.g. {@code CurrentASR(%)}, {@code MediaJitterIn(ms)}) - to
 	 * report as dynamic statistics instead of static ones. A name is matched against the part of each
 	 * statistics key after {@link Constant#HASH}, or against the whole key for the ungrouped General
 	 * and Network properties, so a name two groups shared would be selected in both. IP Group statistics
@@ -247,9 +247,9 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	 * Sets which properties are reported as dynamic (historical) statistics rather than static ones,
 	 * from a comma-separated string of property names. Each entry is the property name on its own - no
 	 * group prefix and no {@code #} separator, but the unit suffix included, e.g.
-	 * {@code AnswerSeizureRatio(%)} - and is matched against the part of each statistics key after
-	 * {@link Constant#HASH}, so {@code AnswerSeizureRatio(%)} selects the
-	 * {@code CallQualityStatistics#AnswerSeizureRatio(%)} statistic. A name two groups shared would be
+	 * {@code CurrentASR(%)} - and is matched against the part of each statistics key after
+	 * {@link Constant#HASH}, so {@code CurrentASR(%)} selects the
+	 * {@code CallQualityStatistics#CurrentASR(%)} statistic. A name two groups shared would be
 	 * selected in both, and the ungrouped General and Network properties, whose keys carry no prefix,
 	 * are matched by their whole key. IP Group statistics ({@code IPGroupStatistics_<index>_<name>} groups) are never
 	 * selected. Matching is otherwise exact - no normalisation, prefix matching
