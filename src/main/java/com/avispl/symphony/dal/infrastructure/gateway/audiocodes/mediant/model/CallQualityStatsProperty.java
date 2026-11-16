@@ -18,7 +18,7 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum CallQualityStatsProperty implements KpiProperty {
-	ANSWER_SEIZURE_RATIO("AnswerSeizureRatio(%)", "answerSeizureRatio"),
+	CURRENT_ASR("CurrentASR(%)", "answerSeizureRatio"),
 	NETWORK_EFFECTIVENESS_RATIO("NetworkEffectivenessRatio(%)", "networkEffectivenessRatio"),
 	FAILED_CALLS_IN_RATIO("FailedCallsInRatio(%)", "failedCallsInRatio"),
 	FAILED_CALLS_OUT_RATIO("FailedCallsOutRatio(%)", "failedCallsOutRatio"),

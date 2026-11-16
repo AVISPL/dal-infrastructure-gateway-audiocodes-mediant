@@ -26,7 +26,7 @@ public enum GeneralProperty {
 	OPERATIONAL_STATE("OperationalState"),
 	PRODUCT_TYPE("ProductType"),
 	PROTOCOL_TYPE("ProtocolType"),
-	VERSION_ID("VersionID"),
+	SOFTWARE_VERSION("SoftwareVersion"),
 	SAVE_NEEDED("SaveNeeded"),
 	SERIAL_NUMBER("SerialNumber"),
 	SYSTEM_UPTIME("SystemUptime(sec)"),
@@ -57,7 +57,7 @@ public enum GeneralProperty {
 			case OPERATIONAL_STATE -> deviceStatus.getOperationalState();
 			case PRODUCT_TYPE -> deviceStatus.getProductType();
 			case PROTOCOL_TYPE -> deviceStatus.getProtocolType();
-			case VERSION_ID -> deviceStatus.getVersionID();
+			case SOFTWARE_VERSION -> deviceStatus.getVersionID();
 			case SAVE_NEEDED -> deviceStatus.getSaveNeeded().toString();
 			case SERIAL_NUMBER -> deviceStatus.getSerialNumber();
 			case SYSTEM_UPTIME -> deviceStatus.getSystemUpTime().toString();

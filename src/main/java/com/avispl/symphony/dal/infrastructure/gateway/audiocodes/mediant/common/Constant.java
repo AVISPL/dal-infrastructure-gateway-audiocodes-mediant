@@ -61,6 +61,16 @@ public class Constant {
 	public static final String MEDIA_CLUSTER_STATS_KPI_API = "/kpi/current/media/clusterStats/global";
 	public static final String SBC_OTHER_STATS_KPI_API = "/kpi/current/sbc/otherStats/global";
 	public static final String SIP_REC_STATS_KPI_API = "/kpi/current/sbc/sipRecStats/global";
+	//	Base paths for the device's IP Group KPI entities; the IP Group index is appended (e.g. ".../ipGroup/1")
+	//	to read every KPI of that IP Group. IP_GROUP_CALL_STATS_KPI_API on its own lists the IP Group entities.
+	public static final String IP_GROUP_CALL_STATS_KPI_API = "/kpi/current/sbc/callStats/ipGroup";
+	public static final String IP_GROUP_MEDIA_STATS_KPI_API = "/kpi/current/media/mediaStats/ipGroup";
+	public static final String IP_GROUP_OTHER_STATS_KPI_API = "/kpi/current/sbc/otherStats/ipGroup";
+	public static final String IP_GROUP_SIP_REC_STATS_KPI_API = "/kpi/current/sbc/sipRecStats/ipGroup";
+	public static final String DETAILED_PARAM = "detailed";
+	public static final String AFTER_PARAM = "after";
+	//	Maximum number of IP Group listing pages requested in one discovery.
+	public static final int IP_GROUP_DISCOVERY_MAX_PAGES = 50;
 	public static final String TEST_CALL_DIAL_API = "/sipTestCall/dial";
 	public static final String TEST_CALL_STATUS_API = "/sipTestCall/getStatus";
 	public static final String TEST_CALL_SHOW_API = "/sipTestCall/show";
@@ -70,7 +80,9 @@ public class Constant {
 	//	ActiveAlarms summary group properties
 	public static final String COUNT = "Count";
 	public static final String SEVERITY = "Severity";
-	public static final String SOURCES = "Sources";
+	public static final String SOURCE = "Source";
+	//	Prefix of each per-alarm group, ActiveAlarm_<id>; distinct from the ActiveAlarms summary group name (ACTIVE_ALARM)
+	public static final String ACTIVE_ALARM_ITEM_PREFIX = "ActiveAlarm";
 
 	//	Groups
 	public static final String CALL_DIAGNOSTICS_GROUP = "CallDiagnostics";
@@ -89,6 +101,8 @@ public class Constant {
 	public static final String MEDIA_CLUSTER_STATISTICS_GROUP = "MediaClusterStatistics";
 	public static final String REGISTRATION_STATISTICS_GROUP = "RegistrationStatistics";
 	public static final String SIP_REC_STATISTICS_GROUP = "SIPRecStatistics";
+	//	Enables the per-IP-Group statistics, reported as one IPGroupStatistics_<index>_<name> group per IP Group.
+	public static final String IP_GROUP_STATISTICS_GROUP = "IPGroupStatistics";
 	//	Every value displayPropertyGroups is allowed to contain; anything else is unsupported and dropped.
 	public static final Set<String> SUPPORTED_PROPERTY_GROUPS = Set.of(
 			CALL_STATS_ALL_GROUPS,
@@ -105,6 +119,7 @@ public class Constant {
 			MEDIA_CLUSTER_STATISTICS_GROUP,
 			REGISTRATION_STATISTICS_GROUP,
 			SIP_REC_STATISTICS_GROUP,
+			IP_GROUP_STATISTICS_GROUP,
 			NETWORK_GROUP,
 			ACTIVE_ALARM);
 
@@ -112,7 +127,7 @@ public class Constant {
 	//	Deliberately a subset of what the adapter emits - only the KPIs that make sense as a graphed time
 	//	series - and sourced from the property enums so the names cannot drift from the emitted keys.
 	public static final Set<String> SUPPORTED_HISTORICAL_PROPERTIES = Set.of(
-			CallQualityStatsProperty.ANSWER_SEIZURE_RATIO.getName(),
+			CallQualityStatsProperty.CURRENT_ASR.getName(),
 			CallQualityStatsProperty.NETWORK_EFFECTIVENESS_RATIO.getName(),
 			CallQualityStatsProperty.FAILED_CALLS_IN_RATIO.getName(),
 			CallQualityStatsProperty.FAILED_CALLS_OUT_RATIO.getName(),
@@ -128,6 +143,19 @@ public class Constant {
 			MediaStatsProperty.MEDIA_BANDWIDTH_OUT.getName(),
 			MediaDspStatsProperty.DSP_RESOURCE_CURRENT.getName(),
 			RegistrationStatsProperty.REGISTERED_USERS.getName());
+
+	//	Per-group request interval, in seconds: how long a property group's data is reused before the group is requested
+	//	again. Only the groups with a setter in GroupIntervalCommunicator accept one.
+	public static final long DEFAULT_REQUEST_INTERVAL_SECONDS = 60L;
+	public static final long MIN_REQUEST_INTERVAL_SECONDS = 60L;
+	public static final long MAX_REQUEST_INTERVAL_SECONDS = 86400L;
+	//	A group whose interval has passed to within this many milliseconds is requested anyway. getMultipleStatistics is
+	//	called by Symphony on a schedule that can arrive slightly early (e.g. 59.9 seconds after the last cycle), and
+	//	without this margin such a cycle would skip the group, doubling its effective interval.
+	public static final long REQUEST_INTERVAL_TOLERANCE_MS = 5000L;
+	//	Per-group property holding the time a group was last requested from the device, and the format of its value (UTC).
+	public static final String DATA_RETRIEVED_TIME = "DataRetrievedTime";
+	public static final String DATA_RETRIEVED_TIME_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 
 	//	CallDiagnostics group properties
 	public static final String CALL_DIAGNOSTICS_CALLED_NUMBER = "CalledNumber";
