@@ -75,7 +75,7 @@ class AudioCodesMediantIpGroupTest {
 
 		Assertions.assertEquals("42", stats.get("IPGroupStatistics_1_PSTN1#ActiveCallsIn"));
 		Assertions.assertEquals("41", stats.get("IPGroupStatistics_2_PSTN2#MediaMOSIn"));
-		Assertions.assertEquals("94", stats.get("IPGroupStatistics_3_Teams#AnswerSeizureRatio(%)"));
+		Assertions.assertEquals("94", stats.get("IPGroupStatistics_3_Teams#CurrentASR(%)"));
 		Assertions.assertEquals("24", stats.get("IPGroupStatistics_4_ContactCenter#SIPRecSessions"));
 		Assertions.assertEquals("120", stats.get("IPGroupStatistics_4_ContactCenter#RegisteredUsers"));
 	}
@@ -98,7 +98,7 @@ class AudioCodesMediantIpGroupTest {
 
 		Assertions.assertTrue(dynamicStats.containsKey(Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + "CurrentASR(%)"));
 		Assertions.assertTrue(dynamicStats.keySet().stream().noneMatch(key -> key.startsWith(Constant.IP_GROUP_STATISTICS_GROUP + Constant.UNDERSCORE)));
-		Assertions.assertEquals("94", statistics.getStatistics().get("IPGroupStatistics_3_Teams#AnswerSeizureRatio(%)"));
+		Assertions.assertEquals("94", statistics.getStatistics().get("IPGroupStatistics_3_Teams#CurrentASR(%)"));
 	}
 
 	@Test
