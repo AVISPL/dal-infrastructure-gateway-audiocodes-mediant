@@ -29,7 +29,7 @@ public enum IpGroupStatsProperty implements KpiProperty {
 	ESTABLISHED_CALLS_OUT_TOTAL("EstablishedCallsOutTotal", "establishedCallsOutTotal", Constant.IP_GROUP_CALL_STATS_KPI_API),
 	ATTEMPTED_CALLS_RATE_IN("AttemptedCallsRateIn(cps)", "attemptedCallsRateIn", Constant.IP_GROUP_CALL_STATS_KPI_API),
 	ATTEMPTED_CALLS_RATE_OUT("AttemptedCallsRateOut(cps)", "attemptedCallsRateOut", Constant.IP_GROUP_CALL_STATS_KPI_API),
-	ANSWER_SEIZURE_RATIO("AnswerSeizureRatio(%)", "answerSeizureRatio", Constant.IP_GROUP_CALL_STATS_KPI_API),
+	CURRENT_ASR("CurrentASR(%)", "answerSeizureRatio", Constant.IP_GROUP_CALL_STATS_KPI_API),
 	NETWORK_EFFECTIVENESS_RATIO("NetworkEffectivenessRatio(%)", "networkEffectivenessRatio", Constant.IP_GROUP_CALL_STATS_KPI_API),
 	FAILED_CALLS_IN_RATIO("FailedCallsInRatio(%)", "failedCallsInRatio", Constant.IP_GROUP_CALL_STATS_KPI_API),
 	FAILED_CALLS_OUT_RATIO("FailedCallsOutRatio(%)", "failedCallsOutRatio", Constant.IP_GROUP_CALL_STATS_KPI_API),
