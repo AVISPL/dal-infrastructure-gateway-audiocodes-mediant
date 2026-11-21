@@ -370,9 +370,9 @@ class AudioCodesMediantTest {
 	 */
 	@Test
 	void testGetMultipleStatistics_withHistoricalProperties() throws Exception {
-		String answerSeizureRatioProperty = "AnswerSeizureRatio(%)";
+		String currentAsrProperty = "CurrentASR(%)";
 		String activeSessionsProperty = "ActiveSessions";
-		String answerSeizureRatioKey = Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + answerSeizureRatioProperty;
+		String currentAsrKey = Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + currentAsrProperty;
 		String activeSessionsKey = Constant.CALL_LOAD_STATISTICS_GROUP + Constant.HASH + activeSessionsProperty;
 		String networkEffectivenessRatioKey = Constant.CALL_QUALITY_STATISTICS_GROUP + Constant.HASH + "NetworkEffectivenessRatio(%)";
 
@@ -383,7 +383,7 @@ class AudioCodesMediantTest {
 		historicalCommunicator.setPassword("admin");
 		historicalCommunicator.setDisplayPropertyGroups(
 				Constant.CALL_QUALITY_STATISTICS_GROUP + "," + Constant.CALL_LOAD_STATISTICS_GROUP);
-		historicalCommunicator.setHistoricalProperties(answerSeizureRatioProperty + "," + activeSessionsProperty);
+		historicalCommunicator.setHistoricalProperties(currentAsrProperty + "," + activeSessionsProperty);
 		historicalCommunicator.init();
 		try {
 			var statistics = (ExtendedStatistics) historicalCommunicator.getMultipleStatistics().get(0);
@@ -391,15 +391,15 @@ class AudioCodesMediantTest {
 			Map<String, String> dynamicStats = statistics.getDynamicStatistics();
 
 			//	Both selected properties are reported dynamically, carrying the device's actual values.
-			String answerSeizureRatio = dynamicStats.get(answerSeizureRatioKey);
+			String currentAsr = dynamicStats.get(currentAsrKey);
 			String activeSessions = dynamicStats.get(activeSessionsKey);
-			Assertions.assertEquals("95", answerSeizureRatio, "Expected the device's answerSeizureRatio in the dynamic statistics");
+			Assertions.assertEquals("95", currentAsr, "Expected the device's answerSeizureRatio in the dynamic statistics");
 			Assertions.assertEquals("8", activeSessions, "Expected the device's activeSessions in the dynamic statistics");
-			Assertions.assertTrue(Util.isNumeric(answerSeizureRatio) && Util.isNumeric(activeSessions),
+			Assertions.assertTrue(Util.isNumeric(currentAsr) && Util.isNumeric(activeSessions),
 					"Only numeric values are eligible to be reported dynamically");
 
 			//	And remain reported statically too - a selected property appears in both maps.
-			Assertions.assertEquals("95", staticStats.get(answerSeizureRatioKey),
+			Assertions.assertEquals("95", staticStats.get(currentAsrKey),
 					"A property reported dynamically must also remain in the static statistics");
 			Assertions.assertEquals("8", staticStats.get(activeSessionsKey),
 					"A property reported dynamically must also remain in the static statistics");

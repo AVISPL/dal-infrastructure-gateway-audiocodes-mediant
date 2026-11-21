@@ -177,10 +177,10 @@ public final class Util {
 	 * <p>
 	 * A summary group named {@code ActiveAlarms} is always emitted with the total alarm count
 	 * ({@code ActiveAlarms#Count}) and the distinct severity levels and sources currently present,
-	 * each rendered as a CSV string ({@code ActiveAlarms#Severity}, {@code ActiveAlarms#Sources}).
+	 * each rendered as a CSV string ({@code ActiveAlarms#Severity}, {@code ActiveAlarms#Source}).
 	 * <p>
-	 * Each individual alarm is additionally represented as a group named {@code ActiveAlarms_<id>},
-	 * with entries for each {@link AlarmProperty}. Keys follow the format {@code ActiveAlarms_<id>#<PropertyName>}.
+	 * Each individual alarm is additionally represented as a group named {@code ActiveAlarm_<id>},
+	 * with entries for each {@link AlarmProperty}. Keys follow the format {@code ActiveAlarm_<id>#<PropertyName>}.
 	 *
 	 * @param alarmsList the list of active alarms to map
 	 * @return a map of monitoring properties keyed by alarm group and property name
@@ -190,11 +190,11 @@ public final class Util {
 		int count = CollectionUtils.isEmpty(alarmsList) ? 0 : alarmsList.size();
 		properties.put(String.format(Constant.PROPERTY_FORMAT, Constant.ACTIVE_ALARM, Constant.COUNT), String.valueOf(count));
 		properties.put(String.format(Constant.PROPERTY_FORMAT, Constant.ACTIVE_ALARM, Constant.SEVERITY), joinDistinct(alarmsList, Alarms::getSeverity));
-		properties.put(String.format(Constant.PROPERTY_FORMAT, Constant.ACTIVE_ALARM, Constant.SOURCES), joinDistinct(alarmsList, Alarms::getSource));
+		properties.put(String.format(Constant.PROPERTY_FORMAT, Constant.ACTIVE_ALARM, Constant.SOURCE), joinDistinct(alarmsList, Alarms::getSource));
 
 		if (!CollectionUtils.isEmpty(alarmsList)) {
 			for (Alarms alarm : alarmsList) {
-				String groupName = Constant.ACTIVE_ALARM + Constant.UNDERSCORE + alarm.getId();
+				String groupName = Constant.ACTIVE_ALARM_ITEM_PREFIX + Constant.UNDERSCORE + alarm.getId();
 				properties.putAll(generateProperties(AlarmProperty.values(), groupName, property -> mapToAlarm(alarm, property)));
 			}
 		}
@@ -239,7 +239,7 @@ public final class Util {
 			case DESCRIPTION-> mapToValue(alarms.getDescription());
 			case SEVERITY -> mapToValue(alarms.getSeverity());
 			case SOURCE -> mapToValue(alarms.getSource());
-			case DATE -> mapToValue(alarms.getDate());
+			case TIMESTAMP -> mapToValue(alarms.getDate());
 		};
 	}
 

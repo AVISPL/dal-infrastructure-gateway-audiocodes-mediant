@@ -7,7 +7,7 @@ Main features are: device status and network monitoring, call performance and qu
 ## Main use cases for AudioCodes Mediant
 - **Monitor** device health and status, including operational state, software version, uptime, high-availability state, and pending save/reset/upgrade actions
 - **Monitor** call performance, including call load, capacity, routing, traffic, termination, and media issues
-- **Monitor** call and media quality, including answer seizure ratio, network effectiveness ratio, post-dial delay, jitter, delay, MOS, and packet loss
+- **Monitor** call and media quality, including current ASR (answer seizure ratio), network effectiveness ratio, post-dial delay, jitter, delay, MOS, and packet loss
 - **Monitor** SIP registration activity and SIP recording sessions
 - **View** active alarms raised by the device, both as a summary and per individual alarm
 - **Control** SIP diagnostic test calls - start a test call from the device and stop it on demand
@@ -25,6 +25,8 @@ The Symphony instance or Cloud Connector must be able to reach:
 - Protocol / Port: HTTPs, port 443 (default; confirm against the customer's device setup)
 
 Firewall or proxy rules must allow outbound connectivity between the Symphony Cloud Connector and the device on the configured port.
+
+Note: This is a single-device adapter. Each AudioCodes Mediant device is configured in Symphony individually - the adapter connects directly to one device and does not discover or aggregate others.
 
 The adapter supports AudioCodes Session Border Controllers, Media Gateways and MSBR devices that expose the REST API described in the AudioCodes REST API for SBC-Gateway-MSBR Devices guide (Version 7.4), with monitorable properties determined by each device model's capabilities. Validated support: Mediant 3100 SBC.
 
@@ -55,18 +57,34 @@ Adapter behavior can be tuned via the following Adapter Configuration Parameters
 
 | Property | Description |
 | --- | --- |
-| displayPropertyGroups | Comma-separated list of optional property groups to display. Defaults to All. Possible values: All (default), Network, ActiveAlarms, CallDiagnostics, CallLoadStatistics, CallQualityStatistics, CallTerminationStatistics, CallMediaIssuesStatistics, CallCapacityStatistics, CallRoutingStatistics, CallTrafficStatistics, MediaStatistics, MediaDSPStatistics, MediaClusterStatistics, RegistrationStatistics, SIPRecStatistics. General and Adapter Metadata properties are never gated and are always shown. This is a display parameter, not a polling parameter; it does not affect how often the device is polled. |
-| historicalProperties | Comma-separated list of properties reported as dynamic statistics, so Symphony stores them as a time series and can graph them. Defaults to none. Give the property name only, without the group prefix. Possible values: AnswerSeizureRatio(%), NetworkEffectivenessRatio(%), FailedCallsInRatio(%), FailedCallsOutRatio(%), PostDialDelay(sec), ActiveSessions, AttemptedCallsRateIn(cps), AttemptedCallsRateOut(cps), MediaPacketLossIn(%), MediaPacketLossOut(%), MediaJitterIn(ms), MediaJitterOut(ms), MediaBandwidthIn(Kbps), MediaBandwidthOut(Kbps), DSPResourceCurrent(%), RegisteredUsers. Example: AnswerSeizureRatio(%),ActiveSessions,MediaJitterIn(ms). This is a storage and graphing parameter, not a polling parameter; it does not affect how often the device is polled. |
+| displayPropertyGroups | Comma-separated list of optional property groups to display. Defaults to All. Possible values: All (default), ActiveAlarms, CallCapacityStatistics, CallDiagnostics, CallLoadStatistics, CallMediaIssuesStatistics, CallQualityStatistics, CallRoutingStatistics, CallTerminationStatistics, CallTrafficStatistics, CPUStatistics, EthernetPortStatistics, HAStatistics, IPGroupStatistics, LicenseStatistics, MediaClusterStatistics, MediaDSPStatistics, MediaStatistics, MemoryStatistics, Network, RegistrationStatistics, SIPRecStatistics, SIPTLSStatistics, StorageStatistics. General and Adapter Metadata properties are never gated and are always shown. A group that is not enabled is not requested from the device at all. How often an enabled group is requested is set by the request interval properties below. |
+| historicalProperties | Comma-separated list of properties reported as dynamic statistics, so Symphony stores them as a time series and can graph them. Defaults to none. Give the property name only, without the group prefix. Possible values: CurrentASR(%), NetworkEffectivenessRatio(%), FailedCallsInRatio(%), FailedCallsOutRatio(%), PostDialDelay(sec), ActiveSessions, AttemptedCallsRateIn(cps), AttemptedCallsRateOut(cps), MediaPacketLossIn(%), MediaPacketLossOut(%), MediaJitterIn(ms), MediaJitterOut(ms), MediaBandwidthIn(Kbps), MediaBandwidthOut(Kbps), DSPResourceCurrent(%), RegisteredUsers, MemoryUtilization(%). Example: CurrentASR(%),ActiveSessions,MediaJitterIn(ms). Properties of the IP Group Statistics groups cannot be selected: a listed name such as CurrentASR(%) selects only the device-wide property of that name, never the property of an IP Group. This is a storage and graphing parameter; how often a property's group is requested is set by the request interval properties below. |
+| `<group>RequestInterval` (21 properties, one per cached property group: activeAlarmsRequestInterval, callCapacityStatisticsRequestInterval, callLoadStatisticsRequestInterval, callMediaIssuesStatisticsRequestInterval, callQualityStatisticsRequestInterval, callRoutingStatisticsRequestInterval, callTerminationStatisticsRequestInterval, callTrafficStatisticsRequestInterval, cpuStatisticsRequestInterval, ethernetPortStatisticsRequestInterval, haStatisticsRequestInterval, ipGroupStatisticsRequestInterval, licenseStatisticsRequestInterval, mediaClusterStatisticsRequestInterval, mediaDspStatisticsRequestInterval, mediaStatisticsRequestInterval, memoryStatisticsRequestInterval, registrationStatisticsRequestInterval, sipRecStatisticsRequestInterval, sipTlsStatisticsRequestInterval, storageStatisticsRequestInterval) | Sets, in seconds, how long the adapter reuses a property group's data before requesting that group from the device again, to reduce the number of requests sent to the device. The property name is the group name in lower camel case followed by RequestInterval, for example mediaStatisticsRequestInterval. Applies only to groups enabled in displayPropertyGroups. Default: not set, meaning the group is requested at every monitoring cycle. Valid values: a whole number from 60 to 86400 (24 hours). A non-numeric or out-of-range value uses 60 and logs a warning; a blank value clears the interval. |
 
-Note: Both parameters are matched case-sensitively. Unrecognised displayPropertyGroups values are ignored and logged as a warning listing the supported values; if every supplied value is unrecognised, the adapter falls back to All and logs a separate warning.
+Note: displayPropertyGroups and historicalProperties are matched case-sensitively. Unrecognised displayPropertyGroups values are ignored and logged as a warning listing the supported values; if every supplied value is unrecognised, the adapter falls back to All and logs a separate warning.
 
 ### Polling parameters for AudioCodes Mediant
+Answer guidance: for any question about the AudioCodes Mediant polling rate, polling interval or monitoring cycle, state every point in this section. Never select or omit points.
+- How often each property group is requested from the device is configurable through the 21 request interval properties (see 'Request interval behavior for AudioCodes Mediant' below), from 60 seconds to 24 hours per group.
+- The adapter is called once per Symphony monitoring cycle (minimum 1 minute); the monitoring cycle itself is a Symphony setting, not an adapter configuration property. General, Network, Adapter Metadata and Call Diagnostics are refreshed at every monitoring cycle.
+- displayPropertyGroups and historicalProperties are not polling parameters. displayPropertyGroups selects which property groups are displayed; historicalProperties selects which properties are stored as a time series for graphing.
 
-The AudioCodes Mediant adapter has no configurable polling parameters. There is no polling interval, polling rate, polling cycle or refresh interval parameter exposed by this adapter, and none can be set in Symphony. The device is polled on Symphony's standard polling cycle.
-
-displayPropertyGroups and historicalProperties are not polling parameters and must not be described as polling-related or polling-adjacent. displayPropertyGroups selects which property groups are displayed; historicalProperties selects which properties are stored as a time series for graphing. Neither changes how often the adapter polls the device.
-
-If asked which polling parameters can be configured for this adapter, the correct answer is: none. If asked whether the API polling rate or polling interval is adjustable, the correct answer is: no.
+### Request interval behavior for AudioCodes Mediant
+Answer guidance: for any question about request intervals, how often a property group is requested, or reducing the number of requests sent to the device, state every point in this section and list every property. Never select or omit points.
+- A `<group>RequestInterval` property sets, in seconds, how long the adapter reuses a property group's data before requesting that group from the device again. There is one request interval property per cached property group; the 21 properties are: activeAlarmsRequestInterval, callCapacityStatisticsRequestInterval, callLoadStatisticsRequestInterval, callMediaIssuesStatisticsRequestInterval, callQualityStatisticsRequestInterval, callRoutingStatisticsRequestInterval, callTerminationStatisticsRequestInterval, callTrafficStatisticsRequestInterval, cpuStatisticsRequestInterval, ethernetPortStatisticsRequestInterval, haStatisticsRequestInterval, ipGroupStatisticsRequestInterval, licenseStatisticsRequestInterval, mediaClusterStatisticsRequestInterval, mediaDspStatisticsRequestInterval, mediaStatisticsRequestInterval, memoryStatisticsRequestInterval, registrationStatisticsRequestInterval, sipRecStatisticsRequestInterval, sipTlsStatisticsRequestInterval, storageStatisticsRequestInterval.
+- The value is in seconds. The valid range is 60-86400 (24 hours). A non-numeric, below-minimum or above-maximum value uses 60 and logs a warning (an above-maximum value is not limited to 86400). A blank value clears the interval.
+- A group with no request interval set is requested at every monitoring cycle, as in earlier versions of the adapter.
+- An interval applies only to groups enabled in displayPropertyGroups. An interval set for a group that is not enabled is ignored, and a warning is logged, since that group is not requested.
+- Inside the interval, the group's properties show the values from its last request. Historical properties in that group keep being reported from those values each monitoring cycle, so the graph shows the same value until the group is requested again.
+- A group whose interval has passed to within 5 seconds is requested, so a monitoring cycle that arrives slightly early does not skip it.
+- If any request of a group fails, the group is requested again at the next monitoring cycle, whatever its interval.
+- A group with a request interval set also shows `<Group>#DataRetrievedTime`: the time of the group's last request to the device, in UTC, formatted as yyyy-MM-ddTHH:mm:ssZ (24-hour clock), for example 2026-11-06T15:04:05Z. Groups without a request interval do not show it.
+- General, Network, Adapter Metadata and Call Diagnostics have no request interval property and are refreshed at every monitoring cycle:
+  - General and Adapter Metadata are always refreshed.
+  - Network is read from the same device status response as General, so an interval would not reduce the number of requests.
+  - Call Diagnostics tracks a live test call and is driven by controls; caching it would show a stale call status.
+- With an interval set on ActiveAlarms, a newly raised or cleared alarm can take up to that interval to appear.
+- After a control runs on a property group with a request interval set, that group is requested again at the next monitoring cycle so it shows the result of the control. Call Diagnostics, currently the only group with controls, is not cached.
 
 ## AudioCodes Mediant - Filtering Device(s)
 
@@ -81,24 +99,32 @@ The AudioCodes Mediant adapter exposes properties across the following groups. C
 
 | Property Group | Description |
 |---|---|
-| General (ungrouped) | High Availability, Local Timestamp, MC Upgrade Status, Operational State, Product Type, Protocol Type, Reset Needed, Save Needed, Serial Number, System Uptime (sec), Upgrade Status, Version ID. These keys are emitted without a group prefix, so they appear at the top of Extended Properties rather than under a General heading |
+| General (ungrouped) | High Availability, Local Timestamp, MC Upgrade Status, Operational State, Product Type, Protocol Type, Reset Needed, Save Needed, Serial Number, System Uptime (sec), Upgrade Status, Software Version. These keys are emitted without a group prefix, so they appear at the top of Extended Properties rather than under a General heading |
 | Adapter Metadata | Active Property Groups, Adapter Build Date, Adapter Uptime, Adapter Uptime (min), Adapter Version |
-| Network | Default Gateway, IP Address, MAC Address, Subnet Mask |
-| Active Alarms | Count, Severity (comma-separated list of the distinct severities across all active alarms), Sources (comma-separated list of the distinct sources) |
-| Active Alarms per alarm (ActiveAlarms_[AlarmID]) | Date, Description, Severity, Source. Each active alarm is reported in its own group, named using the device's own identifier for that alarm; those identifiers come from the device and are not sequential |
-| Call Diagnostics | Called Number*, Calling Number*, Destination*, Start*, Stop*, Call ID, Release Cause, Status |
+| Active Alarms | Count, Severity (comma-separated list of the distinct severities across all active alarms), Source (comma-separated list of the distinct sources) |
+| Active Alarms per alarm (ActiveAlarm_[AlarmID]) | Description, Severity, Source, Timestamp. Each active alarm is reported in its own group, named using the device's own identifier for that alarm; those identifiers come from the device and are not sequential |
 | Call Capacity Statistics | Admission Failed Calls In Total, Admission Failed Calls Out Total, No Resources Calls In Total, No Resources Calls Out Total |
+| Call Diagnostics | Called Number*, Calling Number*, Destination*, Start*, Stop*, Call ID, Release Cause, Status |
 | Call Load Statistics | Active Sessions (graphable), Busy Calls In Total, Busy Calls Out Total |
 | Call Media Issues Statistics | Media Mismatch Calls In Total, Media Mismatch Calls Out Total |
-| Call Quality Statistics | Answer Seizure Ratio (%) (graphable), Failed Calls In Ratio (%) (graphable), Failed Calls Out Ratio (%) (graphable), Network Effectiveness Ratio (%) (graphable), Post Dial Delay (sec) (graphable) |
+| Call Quality Statistics | Current ASR (%) (graphable), Failed Calls In Ratio (%) (graphable), Failed Calls Out Ratio (%) (graphable), Network Effectiveness Ratio (%) (graphable), Post Dial Delay (sec) (graphable) |
 | Call Routing Statistics | No Route Calls In Total |
 | Call Termination Statistics | Abnormal Terminated Calls In Total, Abnormal Terminated Calls Out Total, Media Broken Connection Calls Total |
 | Call Traffic Statistics | Attempted Calls Rate In (cps) (graphable), Attempted Calls Rate Out (cps) (graphable), No Answer Calls In Total, No Answer Calls Out Total |
+| CPU Statistics per CPU (CPUStatistics_[Index]) | Name, CPU Utilization (%), CPU Average Utilization (%), CPU Maximum Utilization (%). Each CPU is reported in its own group, named using the device's CPU index; Name is the device's name for the CPU |
+| Ethernet Port Statistics per port (EthernetPortStatistics_[Index]) | Name, Bytes In Total, Bytes Out Total, Packets In Total, Packets Out Total, FIFO Error In Total, FIFO Error Out Total, Dropped In Total, Dropped Out Total, Frame Error In Total, Compressed In Total, Collisions Total, Carrier Errors Out Total, Compressed Out Total, Unicast In Total, Unicast Out Total, Multicast In Total, Multicast Out Total, Broadcast In Total, Broadcast Out Total, FCS Error In Total, FCS Error Out Total, Discard In Total, Bytes In, Bytes Out, Packets In, Packets Out, FIFO Error In, FIFO Error Out, Dropped In, Dropped Out, Frame Error In, Compressed In, Collisions, Carrier Errors Out, Compressed Out, Unicast In, Unicast Out, Multicast In, Multicast Out, Broadcast In, Broadcast Out, FCS Error In, FCS Error Out, Discard In. Each Ethernet port is reported in its own group, named using the device's port index; Name is the device's name for the port |
+| HA Statistics | HA Active Packet Loss (%), HA Average Active Packet Loss (%), HA Maximum Active Packet Loss (%), HA Redundant Packet Loss (%), HA Average Redundant Packet Loss (%), HA Maximum Redundant Packet Loss (%) |
+| IP Group Statistics per IP Group (IPGroupStatistics_[Index]_[Name]) | Active Calls In, Active Calls Out, Attempted Calls Rate In (cps), Attempted Calls Rate Out (cps), Current ASR (%), Network Effectiveness Ratio (%), Failed Calls In Ratio (%), Failed Calls Out Ratio (%), Post Dial Delay (sec), Average Call Duration (sec), Minutes Of Usage Total (min), Attempted Calls In Total, Attempted Calls Out Total, Established Calls In Total, Established Calls Out Total, Busy Calls In Total, Busy Calls Out Total, No Answer Calls In Total, No Answer Calls Out Total, No Resources Calls In Total, No Resources Calls Out Total, Admission Failed Calls In Total, Admission Failed Calls Out Total, Media Mismatch Calls In Total, Media Mismatch Calls Out Total, No Route Calls In Total, Abnormal Terminated Calls In Total, Abnormal Terminated Calls Out Total, Media Broken Connection Calls Total, Media MOS In, Media MOS Out, Media Packet Loss In (%), Media Packet Loss Out (%), Media Jitter In (ms), Media Jitter Out (ms), Media Delay In (ms), Media Delay Out (ms), Media Bandwidth In (Kbps), Media Bandwidth Out (Kbps), Media Streams, Media RTP Streams, Registered Users, Transaction Rate (tps), Register Rate In (rps), Register Rate Out (rps), SBC Registration Success Ratio (%), User Registration Success Ratio (%), SIP Rec Sessions, SIP Rec Rate (sps). Each IP Group configured on the device is reported in its own group, named using the device's IP Group index and name |
+| License Statistics | License SBC Signaling Usage (%), License SBC Media Usage (%), License Transcoding Usage (%), License SIP Rec Usage (%), License WebRTC Usage (%), License FEU Usage (%). Each value is the percentage of the licensed capacity in use |
 | Media Cluster Statistics | DSP Cluster Utilization (%), Media Cluster Utilization (%) |
 | Media DSP Statistics | DSP Resource Current (%) (graphable), SBC Sessions Coder Transcoding, SBC Sessions Coder Transcoding (%) |
 | Media Statistics | Media Bandwidth In (Kbps) (graphable), Media Bandwidth Out (Kbps) (graphable), Media Delay In (ms), Media Delay Out (ms), Media Jitter In (ms) (graphable), Media Jitter Out (ms) (graphable), Media MOS In, Media MOS Out, Media Packet Loss In (%) (graphable), Media Packet Loss Out (%) (graphable), Media RTP Streams, Media Streams |
+| Memory Statistics | Memory Utilization (%) (graphable), Memory Average Utilization (%), Memory Maximum Utilization (%) |
+| Network | Default Gateway, IP Address, MAC Address, Subnet Mask |
 | Registration Statistics | Registered Users (graphable), Register Rate In (rps), Register Rate Out (rps), SBC Registration Success Ratio (%), Transaction Rate (tps), User Registration Success Ratio (%) |
 | SIP Rec Statistics | SIP Rec Rate (sps), SIP Rec Sessions |
+| SIP TLS Statistics | SIP TLS Active Connections, SIP TLS Average Active Connections, SIP TLS Maximum Active Connections, SIP TLS Attempted Connections Total, SIP TLS Attempted Connections, SIP TLS Rejected Connections Total, SIP TLS Rejected Connections |
+| Storage Statistics per partition (StorageStatistics_[Index]) | Name, Storage Utilization (%), Storage Average Utilization (%), Storage Maximum Utilization (%), Storage Usage (KB), Storage Average Usage (KB), Storage Maximum Usage (KB). Each storage partition is reported in its own group, named using the device's partition index; Name is the device's name for the partition |
 
 **Call Diagnostics controls:**
 
@@ -110,11 +136,29 @@ The AudioCodes Mediant adapter exposes properties across the following groups. C
 | Start* | Dials a new test call using the staged Called Number, Calling Number and Destination values |
 | Stop* | Drops the active test call. Shown only while a call is active |
 
+**Renamed properties:**
+
+The following properties were renamed. Each appears only under its new name; the old names are no longer reported.
+
+| Previous name | New name |
+|---|---|
+| ActiveAlarms_[AlarmID] (per-alarm group) | ActiveAlarm_[AlarmID] |
+| ActiveAlarms#Sources | ActiveAlarms#Source |
+| ActiveAlarms_[AlarmID]#Date | ActiveAlarm_[AlarmID]#Timestamp |
+| CallQualityStatistics#AnswerSeizureRatio(%) | CallQualityStatistics#CurrentASR(%) |
+| VersionID | SoftwareVersion |
+
+The ActiveAlarms summary group, its Count property, the ActiveAlarms value of displayPropertyGroups and activeAlarmsRequestInterval are unchanged.
+
+If historicalProperties contains AnswerSeizureRatio(%), replace it with CurrentASR(%). The old name is no longer supported: it is ignored with a warning in the log, and the ASR graph stops updating until CurrentASR(%) is selected. Graph history recorded under AnswerSeizureRatio(%) does not carry over to CurrentASR(%), which starts a new time series.
+
 **Notes:**
-- The General and Network properties are both sourced from the device's status response. If that response is unavailable, neither set is reported for that polling cycle.
+- The General and Network properties are both sourced from the device's status response. If that response is unavailable, neither set is reported for that monitoring cycle.
 - Ratio, average and quality properties are only calculated by the device once calls have passed through it. On an idle device these correctly report N/A, while the plain counters alongside them report 0.
 - Property availability varies by Mediant model; branches the device does not support are skipped and reported as N/A.
 - Cluster utilisation properties are not meaningful on a non-clustered SBC.
+- IP Group Statistics properties cannot be selected in historicalProperties. A listed name such as CurrentASR(%) selects only the device-wide property of that name (Call Quality Statistics), never the property of an IP Group.
+- A property group with a request interval set also shows DataRetrievedTime, the time (UTC) of the group's last request to the device. See 'Request interval behavior for AudioCodes Mediant'.
 
 ## Troubleshooting checks for AudioCodes Mediant
 
@@ -138,10 +182,11 @@ Note: Connection errors are distinct from login/authentication errors. If creden
 **A Property Group Is Not Displayed**
 - Verify the group name is listed in displayPropertyGroups and is spelled exactly as documented; matching is case-sensitive
 - Check the adapter log for a warning listing the supported values, which indicates an unrecognised group name was supplied
+- Check the Active Property Groups value in the Adapter Metadata properties: it lists the displayPropertyGroups values the adapter is currently using (All means every group is enabled), so a group that is neither listed nor covered by All is not enabled
 - Note that General and Adapter Metadata are always shown and are not controlled by displayPropertyGroups
 
 **Properties Display N/A Instead of a Value**
-- Ratio, average and quality properties (for example Answer Seizure Ratio, Post Dial Delay, jitter, delay, MOS, packet loss) are only calculated by the device once calls have passed through it; N/A is expected on an idle device
+- Ratio, average and quality properties (for example Current ASR, Post Dial Delay, jitter, delay, MOS, packet loss) are only calculated by the device once calls have passed through it; N/A is expected on an idle device
 - Verify the device model supports that property; unsupported branches are reported as N/A
 - Cluster utilisation properties report N/A on a non-clustered SBC
 - If a value is expected, check the adapter log for a message indicating the individual property could not be retrieved or parsed
@@ -150,6 +195,12 @@ Note: Connection errors are distinct from login/authentication errors. If creden
 - Verify the property name is listed in historicalProperties, without its group prefix, and spelled exactly as documented; matching is case-sensitive
 - Verify the property's group is enabled by displayPropertyGroups; a property is only reported as a dynamic statistic if its group is enabled
 - Non-numeric values are skipped for that monitoring cycle and logged, which shows as a gap in the graph rather than a substituted value
+- If the property's group has a request interval set, the graph shows the same value until the group is requested again; this is expected
+
+**A Property Value Is Not Updating Every Monitoring Cycle**
+- Check whether the property's group has a request interval set (`<group>RequestInterval`); inside the interval the group shows the values from its last request
+- Compare the group's DataRetrievedTime with the current time (UTC) to see when the group was last requested
+- Clear the request interval (blank value) to request the group at every monitoring cycle
 
 **Diagnostic Test Call Fails to Start**
 - Verify Called Number, Calling Number and Destination are all set; the call is rejected if any is empty
@@ -166,9 +217,3 @@ If none of the recommended steps help, please enter an SOS ticket at {https://av
 ## What AI Assistant cannot do with AudioCodes Mediant integration:
 - Modify device-side settings, SIP interfaces, IP Groups, routing rules or alarm configuration - these must be configured directly on the AudioCodes device
 - Place production calls; the Call Diagnostics group runs the device's own SIP test call feature only
-
-## AudioCodes Mediant - Additional Resources
-For more questions and details about the adapter and its configuration, please refer to:
-- AudioCodes Mediant Release Notes: https://avi-spl.atlassian.net/wiki/spaces/SYM/pages/5325127683/AudioCodes+Mediant+Release+Notes
-
-Please make sure to mention this is a direct connection between the Symphony Cloud Connector and a single AudioCodes Mediant device (Management Address). The adapter does not aggregate or discover other devices.
