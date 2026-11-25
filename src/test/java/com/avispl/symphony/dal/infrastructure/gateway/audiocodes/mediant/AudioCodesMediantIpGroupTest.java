@@ -74,7 +74,7 @@ class AudioCodesMediantIpGroupTest {
 		Map<String, String> stats = this.pollStatistics();
 
 		Assertions.assertEquals("42", stats.get("IPGroupStatistics_1_PSTN1#ActiveCallsIn"));
-		Assertions.assertEquals("41", stats.get("IPGroupStatistics_2_PSTN2#MediaMOSIn"));
+		Assertions.assertEquals("4.1", stats.get("IPGroupStatistics_2_PSTN2#MediaMOSIn"));
 		Assertions.assertEquals("94", stats.get("IPGroupStatistics_3_Teams#CurrentASR(%)"));
 		Assertions.assertEquals("24", stats.get("IPGroupStatistics_4_ContactCenter#SIPRecSessions"));
 		Assertions.assertEquals("120", stats.get("IPGroupStatistics_4_ContactCenter#RegisteredUsers"));

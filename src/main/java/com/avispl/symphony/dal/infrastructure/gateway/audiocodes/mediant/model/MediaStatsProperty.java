@@ -4,6 +4,7 @@
 package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model;
 
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.KpiProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Util;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -12,8 +13,9 @@ import lombok.Getter;
  * Voice-quality and media-stream KPIs for the RTP legs the device is handling (device group
  * {@code media/mediaStats/global}), monitored under the {@code MediaStatistics} group.
  * <p>
- * Note: the device reports {@code mediaMOSIn}/{@code mediaMOSOut} in units of 0.1 - a raw value of
- * {@code 35} means a MOS of 3.5. These are currently reported exactly as received, without scaling.
+ * The device reports {@code mediaMOSIn}/{@code mediaMOSOut} in units of 0.1 on a scale of 10-50; the
+ * {@code MediaMOSIn}/{@code MediaMOSOut} properties report the MOS with one decimal place (a device value of
+ * {@code 35} is reported as {@code 3.5}).
  *
  * @author Symphony Dev Team
  * @since 1.0.0
@@ -21,8 +23,30 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public enum MediaStatsProperty implements KpiProperty {
-	MEDIA_MOS_IN("MediaMOSIn", "mediaMOSIn"),
-	MEDIA_MOS_OUT("MediaMOSOut", "mediaMOSOut"),
+	MEDIA_MOS_IN("MediaMOSIn", "mediaMOSIn") {
+		/**
+		 * Converts a device value in units of 0.1 to the MOS with one decimal place, e.g. {@code 42} to {@code 4.2}.
+		 *
+		 * @param value the device value
+		 * @return the MOS; {@code value} unchanged if it is not a number
+		 */
+		@Override
+		public String convertValue(String value) {
+			return Util.divide(value, 10, 1);
+		}
+	},
+	MEDIA_MOS_OUT("MediaMOSOut", "mediaMOSOut") {
+		/**
+		 * Converts a device value in units of 0.1 to the MOS with one decimal place, e.g. {@code 42} to {@code 4.2}.
+		 *
+		 * @param value the device value
+		 * @return the MOS; {@code value} unchanged if it is not a number
+		 */
+		@Override
+		public String convertValue(String value) {
+			return Util.divide(value, 10, 1);
+		}
+	},
 	MEDIA_JITTER_IN("MediaJitterIn(ms)", "mediaJitterIn"),
 	MEDIA_JITTER_OUT("MediaJitterOut(ms)", "mediaJitterOut"),
 	MEDIA_DELAY_IN("MediaDelayIn(ms)", "mediaDelayIn"),

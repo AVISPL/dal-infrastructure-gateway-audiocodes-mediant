@@ -859,7 +859,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 	 * Retrieves the KPIs of one device KPI entity into the {@code statsGroupName} group: the real-time KPIs with a single
 	 * request to {@code currentApi}, which returns every real-time KPI value of the entity, and each last-interval
 	 * KPI ({@link IntervalKpiProperty#isLastInterval()}) with its own request to {@code <historyApi>/<kpiId>?interval=last}.
-	 * Each value is displayed as converted by {@link IntervalKpiProperty#convertValue(String)}. A KPI the device does
+	 * Each value is displayed as converted by {@link KpiProperty#convertValue(String)}. A KPI the device does
 	 * not return, or one whose request fails, is reported as {@link Constant#NOT_AVAILABLE}.
 	 *
 	 * @param <T>            the {@link IntervalKpiProperty} enum type of the entity
@@ -893,8 +893,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 					complete = false;
 				}
 			}
-			String displayValue = value == null ? null : property.convertValue(value);
-			stats.put(statsGroupName + Constant.HASH + property.getName(), Util.getDefaultValueForNullData(displayValue, false));
+			stats.put(statsGroupName + Constant.HASH + property.getName(), toDisplayValue(property, value));
 		}
 		return complete;
 	}
@@ -979,9 +978,21 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 		Map<String, String> values = fetchKpiEntityValues(entityApi);
 		for (T property : properties) {
 			String value = values == null ? null : values.get(property.getKpiId());
-			stats.put(groupName + Constant.HASH + property.getName(), Util.getDefaultValueForNullData(value, false));
+			stats.put(groupName + Constant.HASH + property.getName(), toDisplayValue(property, value));
 		}
 		return values != null;
+	}
+
+	/**
+	 * Builds the displayed value of a KPI property: the device value as converted by
+	 * {@link KpiProperty#convertValue(String)}, or {@link Constant#NOT_AVAILABLE} if the device returned no value.
+	 *
+	 * @param property the KPI property
+	 * @param value    the device value, or {@code null}
+	 * @return the displayed value
+	 */
+	private static String toDisplayValue(KpiProperty property, String value) {
+		return Util.getDefaultValueForNullData(value == null ? null : property.convertValue(value), false);
 	}
 
 	/**
@@ -1026,7 +1037,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 				value = null;
 				complete = false;
 			}
-			stats.put(groupName + Constant.HASH + property.getName(), Util.getDefaultValueForNullData(value, false));
+			stats.put(groupName + Constant.HASH + property.getName(), toDisplayValue(property, value));
 		}
 		return complete;
 	}
@@ -1068,8 +1079,7 @@ public class AudioCodesMediantCommunicator extends GroupIntervalCommunicator imp
 					values = Map.of();
 				}
 				for (IpGroupStatsProperty property : scope.getValue()) {
-					stats.put(groupName + Constant.HASH + property.getName(),
-							Util.getDefaultValueForNullData(values.get(property.getKpiId()), false));
+					stats.put(groupName + Constant.HASH + property.getName(), toDisplayValue(property, values.get(property.getKpiId())));
 				}
 			}
 		}

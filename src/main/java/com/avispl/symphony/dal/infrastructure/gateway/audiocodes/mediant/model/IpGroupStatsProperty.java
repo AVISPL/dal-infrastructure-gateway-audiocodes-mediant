@@ -5,6 +5,7 @@ package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model;
 
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.KpiProperty;
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Constant;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Util;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -13,6 +14,8 @@ import lombok.Getter;
  * Per-IP-Group KPIs, reported once for every IP Group under an {@code IPGroupStatistics_<index>_<name>} group.
  * Each KPI is read from the IP Group entity of the device scope in {@link #getScopeApi()}
  * (e.g. {@code /kpi/current/sbc/callStats/ipGroup/<index>}).
+ * The device reports {@code mediaMOSIn}/{@code mediaMOSOut} in units of 0.1 on a scale of 10-50; the
+ * {@code MediaMOSIn}/{@code MediaMOSOut} properties report the MOS with one decimal place.
  *
  * @author Symphony Dev Team
  * @since 1.0.0
@@ -49,8 +52,30 @@ public enum IpGroupStatsProperty implements KpiProperty {
 	ABNORMAL_TERMINATED_CALLS_OUT_TOTAL("AbnormalTerminatedCallsOutTotal", "abnormalTerminatedCallsOutTotal", Constant.IP_GROUP_CALL_STATS_KPI_API),
 	MEDIA_BROKEN_CONNECTION_CALLS_TOTAL("MediaBrokenConnectionCallsTotal", "mediaBrokenConnectionCallsTotal", Constant.IP_GROUP_CALL_STATS_KPI_API),
 	MINUTES_OF_USAGE_TOTAL("MinutesOfUsageTotal(min)", "minutesOfUsageTotal", Constant.IP_GROUP_CALL_STATS_KPI_API),
-	MEDIA_MOS_IN("MediaMOSIn", "mediaMOSIn", Constant.IP_GROUP_MEDIA_STATS_KPI_API),
-	MEDIA_MOS_OUT("MediaMOSOut", "mediaMOSOut", Constant.IP_GROUP_MEDIA_STATS_KPI_API),
+	MEDIA_MOS_IN("MediaMOSIn", "mediaMOSIn", Constant.IP_GROUP_MEDIA_STATS_KPI_API) {
+		/**
+		 * Converts a device value in units of 0.1 to the MOS with one decimal place, e.g. {@code 42} to {@code 4.2}.
+		 *
+		 * @param value the device value
+		 * @return the MOS; {@code value} unchanged if it is not a number
+		 */
+		@Override
+		public String convertValue(String value) {
+			return Util.divide(value, 10, 1);
+		}
+	},
+	MEDIA_MOS_OUT("MediaMOSOut", "mediaMOSOut", Constant.IP_GROUP_MEDIA_STATS_KPI_API) {
+		/**
+		 * Converts a device value in units of 0.1 to the MOS with one decimal place, e.g. {@code 42} to {@code 4.2}.
+		 *
+		 * @param value the device value
+		 * @return the MOS; {@code value} unchanged if it is not a number
+		 */
+		@Override
+		public String convertValue(String value) {
+			return Util.divide(value, 10, 1);
+		}
+	},
 	MEDIA_JITTER_IN("MediaJitterIn(ms)", "mediaJitterIn", Constant.IP_GROUP_MEDIA_STATS_KPI_API),
 	MEDIA_JITTER_OUT("MediaJitterOut(ms)", "mediaJitterOut", Constant.IP_GROUP_MEDIA_STATS_KPI_API),
 	MEDIA_DELAY_IN("MediaDelayIn(ms)", "mediaDelayIn", Constant.IP_GROUP_MEDIA_STATS_KPI_API),

@@ -125,6 +125,15 @@ class AudioCodesMediantTest {
 	}
 
 	@Test
+	void testGetMultipleStatistics_mediaMosReportedWithOneDecimalPlace() throws Exception {
+		this.communicator.setDisplayPropertyGroups(Constant.MEDIA_STATISTICS_GROUP);
+		var statistics = (ExtendedStatistics) this.communicator.getMultipleStatistics().get(0);
+
+		Assertions.assertEquals("4.2", statistics.getStatistics().get(Constant.MEDIA_STATISTICS_GROUP + Constant.HASH + "MediaMOSIn"));
+		Assertions.assertEquals("4.1", statistics.getStatistics().get(Constant.MEDIA_STATISTICS_GROUP + Constant.HASH + "MediaMOSOut"));
+	}
+
+	@Test
 	void testControlProperty_startAndStopCallDiagnostic() throws Exception {
 		String calledNumberKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_CALLED_NUMBER;
 		String callingNumberKey = Constant.CALL_DIAGNOSTICS_GROUP + Constant.HASH + Constant.CALL_DIAGNOSTICS_CALLING_NUMBER;

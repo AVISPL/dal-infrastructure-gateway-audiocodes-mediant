@@ -8,6 +8,8 @@ import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -47,6 +49,23 @@ public final class Util {
 	 * @param value input value
 	 * @return value after checking
 	 */
+	/**
+	 * Divides a numeric device value, for a device KPI reported in fractional units (e.g. MOS in units of 0.1).
+	 *
+	 * @param value   the device value
+	 * @param divisor the number of device units in one displayed unit, e.g. {@code 10} for units of 0.1
+	 * @param scale   the number of decimal places of the result, rounded half up
+	 * @return the divided value, e.g. {@code "4.2"} for {@code "42"} divided by 10 with scale 1; {@code value}
+	 * unchanged if it is not a number
+	 */
+	public static String divide(String value, int divisor, int scale) {
+		try {
+			return new BigDecimal(value.strip()).divide(BigDecimal.valueOf(divisor), scale, RoundingMode.HALF_UP).toPlainString();
+		} catch (NumberFormatException e) {
+			return value;
+		}
+	}
+
 	public static String getDefaultValueForNullData(String value) {
 		return getDefaultValueForNullData(value, true);
 	}
