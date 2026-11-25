@@ -12,4 +12,14 @@ package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases;
  */
 public interface KpiProperty extends BaseProperty {
 	String getKpiId();
+
+	/**
+	 * Converts a value reported by the device to the value displayed for the property.
+	 *
+	 * @param value the device value, never {@code null}
+	 * @return the displayed value; {@code value} unchanged by default
+	 */
+	default String convertValue(String value) {
+		return value;
+	}
 }

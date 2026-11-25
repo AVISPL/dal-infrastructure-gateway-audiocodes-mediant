@@ -3,10 +3,8 @@
  */
 package com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.model;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-
 import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.bases.IntervalKpiProperty;
+import com.avispl.symphony.dal.infrastructure.gateway.audiocodes.mediant.common.Util;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -42,10 +40,6 @@ public enum HaStatsProperty implements IntervalKpiProperty {
 	 */
 	@Override
 	public String convertValue(String value) {
-		try {
-			return new BigDecimal(value.strip()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP).toPlainString();
-		} catch (NumberFormatException e) {
-			return value;
-		}
+		return Util.divide(value, 100, 2);
 	}
 }

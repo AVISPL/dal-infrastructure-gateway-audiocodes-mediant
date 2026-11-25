@@ -22,6 +22,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 class UtilTest {
 
 	@Test
+	void testDivide_withNumericValue() {
+		Assertions.assertEquals("4.2", Util.divide("42", 10, 1));
+		Assertions.assertEquals("4.0", Util.divide("40", 10, 1));
+		Assertions.assertEquals("0.15", Util.divide(" 15 ", 100, 2));
+	}
+
+	@Test
+	void testDivide_withNonNumericValueReturnsValueUnchanged() {
+		Assertions.assertEquals("abc", Util.divide("abc", 10, 1));
+		Assertions.assertEquals("", Util.divide("", 10, 1));
+	}
+
+	@Test
 	void testIsNumeric_withValidInt() {
 		Assertions.assertTrue(Util.isNumeric("42"));
 		Assertions.assertTrue(Util.isNumeric("0"));
